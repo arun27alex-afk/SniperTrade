@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import ta
 import math
+import plotly.graph_objects as go
 
 # --- PAGE CONFIGURATION & UI SETUP ---
 st.set_page_config(page_title="SniperTrade Algo", page_icon="🎯", layout="wide")
