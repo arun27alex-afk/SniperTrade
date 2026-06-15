@@ -1,9 +1,9 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import plotly.graph_objects as go
 import ta
 import math
-import plotly.graph_objects as go
 
 # --- PAGE CONFIGURATION & UI SETUP ---
 st.set_page_config(page_title="SniperTrade Algo", page_icon="🎯", layout="wide")
@@ -152,6 +152,33 @@ try:
         
     else:
         st.warning("Currently no live data available.")
-        
+
+st.markdown("---")
+st.subheader("📊 Live Nifty 50 Candlestick Chart (5 Min)")
+
+# நிஃப்டியின் லைவ் டேட்டாவை எடுப்பது
+data = yf.download('^NSEI', period='1d', interval='5m')
+
+if not data.empty:
+    # கேண்டில்ஸ்டிக் சார்ட்டை உருவாக்குவது
+    fig = go.Figure(data=[go.Candlestick(x=data.index,
+                    open=data['Open'],
+                    high=data['High'],
+                    low=data['Low'],
+                    close=data['Close'],
+                    name='Nifty 50')])
+
+    # சார்ட்டின் டிசைனை மாற்றுவது
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
+        template='plotly_dark',
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=400
+    )
+
+    # சார்ட்டை ஆப்பில் காட்டுவது
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("Chart data is loading... Please wait.")
 except Exception as e:
     st.error(f"Error fetching data: {e}")
