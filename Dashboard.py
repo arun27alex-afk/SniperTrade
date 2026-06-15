@@ -153,14 +153,17 @@ try:
     else:
         st.warning("Currently no live data available.")
 
+except Exception as e:
+    st.error(f"Error fetching data: {e}")
+
 st.markdown("---")
 st.subheader("📊 Live Nifty 50 Candlestick Chart (5 Min)")
 
-# நிஃப்டியின் லைவ் டேட்டாவை எடுப்பது
+# Fetching live data for Nifty 50
 data = yf.download('^NSEI', period='1d', interval='5m')
 
 if not data.empty:
-    # கேண்டில்ஸ்டிக் சார்ட்டை உருவாக்குவது
+    # Creating the candlestick chart
     fig = go.Figure(data=[go.Candlestick(x=data.index,
                     open=data['Open'],
                     high=data['High'],
@@ -168,7 +171,7 @@ if not data.empty:
                     close=data['Close'],
                     name='Nifty 50')])
 
-    # சார்ட்டின் டிசைனை மாற்றுவது
+    # Updating chart layout
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         template='plotly_dark',
@@ -176,9 +179,8 @@ if not data.empty:
         height=400
     )
 
-    # சார்ட்டை ஆப்பில் காட்டுவது
+    # Displaying the chart in the app
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.warning("Chart data is loading... Please wait.")
-except Exception as e:
-    st.error(f"Error fetching data: {e}")
+0    st.error(f"Error fetching data: {e}")
