@@ -154,7 +154,7 @@ try:
         st.warning("Currently no live data available.")
 
 except Exception as e:
-    st.error(f"Error fetching data: {e}")
+        st.error(f"Error fetching data: {e}")
 
 st.markdown("---")
 st.subheader("📊 Live Nifty 50 Candlestick Chart (5 Min)")
@@ -183,4 +183,3 @@ if not data.empty:
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.warning("Chart data is loading... Please wait.")
-0    st.error(f"Error fetching data: {e}")
