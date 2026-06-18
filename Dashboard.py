@@ -63,13 +63,15 @@ if not st.session_state['access_token']:
 if st.session_state['access_token']:
     fyers = fyersModel.FyersModel(client_id=CLIENT_ID, is_async=False, token=st.session_state['access_token'], log_path="")
     
-    # Testing Data Fetching (SBIN)
+    # --- Live Market Data Fetching (Dynamic Date & Nifty 50) ---
+    today_date = datetime.date.today().strftime('%Y-%m-%d')
+    
     data = {
-        "symbol": "NSE:SBIN-EQ",
+        "symbol": "NSE:NIFTY50-INDEX",  # Live Nifty 50 Index
         "resolution": "5",
         "date_format": "1",
-        "range_from": "2026-06-17",
-        "range_to": "2026-06-17",
+        "range_from": today_date,
+        "range_to": today_date,
         "cont_flag": "1"
     }
     res = fyers.history(data=data)
