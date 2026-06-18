@@ -139,8 +139,9 @@ if st.session_state['access_token']:
 
         fig.update_layout(
             plot_bgcolor='white', paper_bgcolor='white', height=600, margin=dict(l=10, r=50, t=30, b=30),
+            dragmode='pan',
             xaxis=dict(gridcolor='#f2f2f2', linecolor='#e0e0e0', rangeslider_visible=False),
-            yaxis=dict(gridcolor='#f2f2f2', linecolor='#e0e0e0', side='right'),
+            yaxis=dict(gridcolor='#f2f2f2', linecolor='#e0e0e0', side='right', fixedrange=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
