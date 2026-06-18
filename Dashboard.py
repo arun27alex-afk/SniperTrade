@@ -132,7 +132,7 @@ else:
                 )
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
             st.dataframe(display_df, use_container_width=True)
             
             # --- 🎯 SNIPER SIGNAL ALGORITHM ---
