@@ -7,7 +7,7 @@ import datetime
 # --- 1. CREDENTIALS ---
 CLIENT_ID = "BT8FRQLN19-200"           
 SECRET_KEY = "0ivLeQN8vdI2VyKA"  
-REDIRECT_URI = "http://localhost:8501/"  
+REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/"  
 
 st.set_page_config(page_title="Sniper Trade App", layout="wide")
 st.title("🎯 Sniper Trade App (Auto-Login & Pro Signals)")
