@@ -13,7 +13,7 @@ REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/"
 # ==========================================
 
 st.set_page_config(page_title="Sniper Trade App - Nifty 50", page_icon="🎯", layout="wide")
-st.title("🎯 Sniper Trade App (NIFTY 50 Live & Order Execution)")
+st.title("🎯 Sniper Trade App (NIFTY 50 Live & Algo Execution)")
 st.markdown("---")
 
 if 'access_token' not in st.session_state:
@@ -48,7 +48,7 @@ if st.session_state['access_token']:
     
     today_date = datetime.date.today().strftime('%Y-%m-%d')
     data = {
-        "symbol": "NSE:NIFTY50-INDEX",  # Corrected to NIFTY 50 Index
+        "symbol": "NSE:NIFTY50-INDEX",  
         "resolution": "5",
         "date_format": "1",
         "range_from": today_date,
@@ -96,9 +96,9 @@ if st.session_state['access_token']:
             st.subheader("⚙️ Options Settings")
             expiry_str = st.text_input("Enter Expiry (e.g., 23JUN - Tuesday)", "23JUN") 
             
-            # 🔢 NIFTY 50 Lot Selection (1 Lot = 65 Qty as per new rules)
+            # NIFTY 50 Lot Selection (1 Lot = 65 Qty)
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
-            total_qty = num_lots * 65  # Lot size updated to 65
+            total_qty = num_lots * 65  
             st.write(f"Total Quantity to Trade: **{total_qty} shares**")
 
         # --- 🎯 PRO SIGNAL & LIVE ORDER EXECUTION ---
@@ -126,7 +126,7 @@ if st.session_state['access_token']:
         if long_condition:
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
-            st.success(f"### 🟢 STRONG BUY SIGNAL")
+            st.success(f"### 🟢 MARKET GOING UP - BUY CE")
             if premium > 0:
                 st.markdown(f"""
                 **Buy Strike:** `{atm_strike} CE` | **Lots Selected:** {num_lots} ({total_qty} Qty)
@@ -134,13 +134,8 @@ if st.session_state['access_token']:
                 * **Current Premium:** **₹{premium}**
                 * **Target:** ₹{premium + 20:.2f} | **Stop Loss:** ₹{premium - 10:.2f}
                 """)
-                
-                if st.button(f"🚀 BUY NOW ({num_lots} Lot)", type="primary"):
-                    order_data = {
-                        "symbol": opt_symbol, "qty": total_qty, "type": 2, 
-                        "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0,
-                        "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"
-                    }
+                if st.button(f"🚀 BUY {atm_strike} CE ({num_lots} Lot)", type="primary"):
+                    order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
                     if order_res.get("s") == "ok":
                         st.balloons()
@@ -153,7 +148,7 @@ if st.session_state['access_token']:
         elif short_condition:
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
-            st.error(f"### 🔴 STRONG SELL SIGNAL")
+            st.error(f"### 🔴 MARKET GOING DOWN - BUY PE")
             if premium > 0:
                 st.markdown(f"""
                 **Buy Strike:** `{atm_strike} PE` | **Lots Selected:** {num_lots} ({total_qty} Qty)
@@ -161,13 +156,8 @@ if st.session_state['access_token']:
                 * **Current Premium:** **₹{premium}**
                 * **Target:** ₹{premium + 20:.2f} | **Stop Loss:** ₹{premium - 10:.2f}
                 """)
-                
-                if st.button(f"🚀 BUY NOW ({num_lots} Lot)", type="primary"):
-                    order_data = {
-                        "symbol": opt_symbol, "qty": total_qty, "type": 2, 
-                        "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0,
-                        "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"
-                    }
+                if st.button(f"🚀 BUY {atm_strike} PE ({num_lots} Lot)", type="primary"):
+                    order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
                     if order_res.get("s") == "ok":
                         st.balloons()
