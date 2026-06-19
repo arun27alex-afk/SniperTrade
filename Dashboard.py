@@ -91,7 +91,6 @@ if st.session_state['access_token']:
             st.header("📈 Live Market")
             st.markdown("---")
             change = close - prev['Close']
-            # This Nifty value is now dynamically mapped to the latest Close price!
             st.metric(label="NIFTY 50 (Spot)", value=f"{close:,.2f}", delta=f"{change:.2f}")
             st.markdown("---")
             st.info("💡 Next Step: Connecting Live Fyers Options Premium.")
@@ -102,7 +101,6 @@ if st.session_state['access_token']:
         
         atm_strike = int(round(close / 50) * 50) 
         
-        # 60/40 RSI Logic implemented here
         macd_bullish = latest['MACD_Line'] > latest['Signal_Line']
         macd_bearish = latest['MACD_Line'] < latest['Signal_Line']
         
@@ -117,8 +115,6 @@ if st.session_state['access_token']:
             * **Entry Zone (Spot):** {close - 5} to {close + 5}
             * **Target (Spot):** {close + 40}
             * **Stop Loss (Spot):** {close - 20}
-            
-            *(Note: Live Options Premium Price will be integrated here next!)*
             """)
             
         elif short_condition:
@@ -129,8 +125,6 @@ if st.session_state['access_token']:
             * **Entry Zone (Spot):** {close - 5} to {close + 5}
             * **Target (Spot):** {close - 40}
             * **Stop Loss (Spot):** {close + 20}
-            
-            *(Note: Live Options Premium Price will be integrated here next!)*
             """)
             
         else:
@@ -145,10 +139,10 @@ if st.session_state['access_token']:
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['VWAP'], line=dict(color='#795548', width=1.5, dash='dash'), name='VWAP'))
 
         fig.update_layout(
-            plot_bgcolor='white', paper_bgcolor='white', height=600, 
-            margin=dict(l=10, r=50, t=30, b=80), # கீழே சற்று இடம் ஒதுக்கப்பட்டுள்ளது
+            plot_bgcolor='white', paper_bgcolor='white', height=600, margin=dict(l=10, r=50, t=30, b=80),
             dragmode='pan',
             xaxis=dict(gridcolor='#f2f2f2', linecolor='#e0e0e0', rangeslider_visible=False),
             yaxis=dict(gridcolor='#f2f2f2', linecolor='#e0e0e0', side='right', fixedrange=False),
-            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5) # பெயர்கள் சார்ட்டுக்குக் கீழே மாற்றப்பட்டுள்ளது
-        )fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
