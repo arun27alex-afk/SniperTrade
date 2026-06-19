@@ -12,8 +12,8 @@ SECRET_KEY = "0ivLeQN8vdI2VyKA"
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/" 
 # ==========================================
 
-st.set_page_config(page_title="Sniper Trade App", page_icon="🎯", layout="wide")
-st.title("🎯 Sniper Trade App (Pro Strategy Signals)")
+st.set_page_config(page_title="Sniper Trade App - Nifty 50", page_icon="🎯", layout="wide")
+st.title("🎯 Sniper Trade App (NIFTY 50 Live & Order Execution)")
 st.markdown("---")
 
 if 'access_token' not in st.session_state:
@@ -48,7 +48,7 @@ if st.session_state['access_token']:
     
     today_date = datetime.date.today().strftime('%Y-%m-%d')
     data = {
-        "symbol": "NSE:NIFTY50-INDEX", 
+        "symbol": "NSE:NIFTY50-INDEX",  # Corrected to NIFTY 50 Index
         "resolution": "5",
         "date_format": "1",
         "range_from": today_date,
@@ -86,18 +86,24 @@ if st.session_state['access_token']:
         prev = df.iloc[-2] if len(df) > 1 else latest
         close = latest['Close']
         
-        # --- 📌 Dynamic Sidebar Menu ---
+        # --- 📌 Sidebar Menu with Expiry & Nifty 50 Lot Selection ---
         with st.sidebar:
             st.header("📈 Live Market")
             st.markdown("---")
             change = close - prev['Close']
             st.metric(label="NIFTY 50 (Spot)", value=f"{close:,.2f}", delta=f"{change:.2f}")
             st.markdown("---")
-            st.info("💡 Next Step: Connecting Live Fyers Options Premium.")
+            st.subheader("⚙️ Options Settings")
+            expiry_str = st.text_input("Enter Expiry (e.g., 23JUN - Tuesday)", "23JUN") 
+            
+            # 🔢 NIFTY 50 Lot Selection (1 Lot = 65 Qty as per new rules)
+            num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
+            total_qty = num_lots * 65  # Lot size updated to 65
+            st.write(f"Total Quantity to Trade: **{total_qty} shares**")
 
-        # --- 🎯 PRO SIGNAL & TARGET UI ---
+        # --- 🎯 PRO SIGNAL & LIVE ORDER EXECUTION ---
         st.markdown("---")
-        st.subheader("🎯 Live Signal System")
+        st.subheader("🎯 Live NIFTY 50 Premium & Target")
         
         atm_strike = int(round(close / 50) * 50) 
         
@@ -107,33 +113,77 @@ if st.session_state['access_token']:
         long_condition = (latest['RSI'] > 60) and (close > latest['VWAP']) and macd_bullish
         short_condition = (latest['RSI'] < 40) and (close < latest['VWAP']) and macd_bearish
         
+        def get_premium(opt_type):
+            symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
+            try:
+                quote_res = fyers.quotes(data={"symbols": symbol})
+                if quote_res.get("s") == "ok":
+                    return quote_res['d'][0]['v']['lp']
+            except:
+                pass
+            return 0.0
+
         if long_condition:
+            premium = get_premium("CE")
+            opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
             st.success(f"### 🟢 STRONG BUY SIGNAL")
-            st.markdown(f"""
-            **Index Spot Price:** {close}
-            * **Buy Strike:** `{atm_strike} CE`
-            * **Entry Zone (Spot):** {close - 5} to {close + 5}
-            * **Target (Spot):** {close + 40}
-            * **Stop Loss (Spot):** {close - 20}
-            """)
+            if premium > 0:
+                st.markdown(f"""
+                **Buy Strike:** `{atm_strike} CE` | **Lots Selected:** {num_lots} ({total_qty} Qty)
+                * **Buy Zone (Premium):** ₹{premium - 2:.2f} to ₹{premium + 2:.2f}
+                * **Current Premium:** **₹{premium}**
+                * **Target:** ₹{premium + 20:.2f} | **Stop Loss:** ₹{premium - 10:.2f}
+                """)
+                
+                if st.button(f"🚀 BUY NOW ({num_lots} Lot)", type="primary"):
+                    order_data = {
+                        "symbol": opt_symbol, "qty": total_qty, "type": 2, 
+                        "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0,
+                        "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"
+                    }
+                    order_res = fyers.place_order(data=order_data)
+                    if order_res.get("s") == "ok":
+                        st.balloons()
+                        st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
+                    else:
+                        st.error(f"❌ Order Failed: {order_res.get('message')}")
+            else:
+                st.write(f"Buy Strike: {atm_strike} CE (Market Closed or Check Expiry Format)")
             
         elif short_condition:
+            premium = get_premium("PE")
+            opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
             st.error(f"### 🔴 STRONG SELL SIGNAL")
-            st.markdown(f"""
-            **Index Spot Price:** {close}
-            * **Buy Strike:** `{atm_strike} PE`
-            * **Entry Zone (Spot):** {close - 5} to {close + 5}
-            * **Target (Spot):** {close - 40}
-            * **Stop Loss (Spot):** {close + 20}
-            """)
+            if premium > 0:
+                st.markdown(f"""
+                **Buy Strike:** `{atm_strike} PE` | **Lots Selected:** {num_lots} ({total_qty} Qty)
+                * **Buy Zone (Premium):** ₹{premium - 2:.2f} to ₹{premium + 2:.2f}
+                * **Current Premium:** **₹{premium}**
+                * **Target:** ₹{premium + 20:.2f} | **Stop Loss:** ₹{premium - 10:.2f}
+                """)
+                
+                if st.button(f"🚀 BUY NOW ({num_lots} Lot)", type="primary"):
+                    order_data = {
+                        "symbol": opt_symbol, "qty": total_qty, "type": 2, 
+                        "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0,
+                        "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"
+                    }
+                    order_res = fyers.place_order(data=order_data)
+                    if order_res.get("s") == "ok":
+                        st.balloons()
+                        st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
+                    else:
+                        st.error(f"❌ Order Failed: {order_res.get('message')}")
+            else:
+                st.write(f"Buy Strike: {atm_strike} PE (Market Closed or Check Expiry Format)")
             
         else:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
-            st.markdown(f"**Current Trend is Weak.** \n* Spot Price: {close} \n* RSI: {latest['RSI']} (Needs to cross 60 for Buy, or break 40 for Sell)")
+            st.markdown(f"**Current NIFTY 50 Trend is Weak.** \n* Spot Price: {close} \n* RSI: {latest['RSI']:.2f}")
 
         # --- 📊 Live Market Chart ---
         st.markdown("---")
-        st.subheader("📊 Live Market Chart")
+        st.subheader("📊 Live NIFTY 50 Chart")
         fig = go.Figure(data=[go.Candlestick(x=df['Timestamp'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Candlestick')])
         fig.update_traces(increasing_line_color='#26a69a', increasing_fillcolor='#26a69a', decreasing_line_color='#ef5350', decreasing_fillcolor='#ef5350')
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['VWAP'], line=dict(color='#795548', width=1.5, dash='dash'), name='VWAP'))
