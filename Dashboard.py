@@ -7,9 +7,9 @@ import datetime
 # ==========================================
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
-CLIENT_ID = "YOUR_CLIENT_ID-100"       
-SECRET_KEY = "YOUR_SECRET_KEY"         
-REDIRECT_URI = "https://your-app-name.streamlit.app/" 
+CLIENT_ID = "BT8FRQLN19-200"       
+SECRET_KEY = "0ivLeQN8vdI2VyKA"         
+REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/" 
 # ==========================================
 
 st.set_page_config(page_title="Sniper Trade App - Nifty 50", page_icon="🎯", layout="wide")
