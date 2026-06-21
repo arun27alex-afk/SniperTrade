@@ -7,9 +7,9 @@ import datetime
 # ==========================================
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
-CLIENT_ID = "BT8FRQLN19-200"       
-SECRET_KEY = "0ivLeQN8vdI2VyKA"         
-REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/" 
+CLIENT_ID = "YOUR_CLIENT_ID-100"       
+SECRET_KEY = "YOUR_SECRET_KEY"         
+REDIRECT_URI = "https://your-app-name.streamlit.app/" 
 # ==========================================
 
 st.set_page_config(page_title="Sniper Trade App - Nifty 50", page_icon="🎯", layout="wide")
@@ -63,7 +63,6 @@ if st.session_state['access_token']:
         df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata').dt.strftime('%H:%M')
         
         # --- Indicators ---
-        df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
         df['VWAP'] = (df['Typical_Price'] * df['Volume']).cumsum() / df['Volume'].cumsum()
         df['VWAP'] = df['VWAP'].fillna(df['Close']) 
@@ -82,11 +81,78 @@ if st.session_state['access_token']:
         
         df = df.round(2)
         
+        # --- 🤖 AUTO-BACKTEST LOGIC FOR SCORECARD ---
+        total_signals_today = 0
+        targets_hit_today = 0
+        sl_hit_today = 0
+        active_trades = []
+
+        df['Prev_RSI'] = df['RSI'].shift(1)
+        df['Prev_Close'] = df['Close'].shift(1)
+        df['Prev_VWAP'] = df['VWAP'].shift(1)
+        df['Prev_MACD'] = df['MACD_Line'].shift(1)
+        df['Prev_Signal'] = df['Signal_Line'].shift(1)
+
+        for i in range(1, len(df)):
+            row = df.iloc[i]
+            
+            # 1. Check if ongoing trades hit Target or SL
+            for t in active_trades[:]:
+                if t['type'] == 'LONG':
+                    if row['High'] >= t['target']:
+                        targets_hit_today += 1
+                        active_trades.remove(t)
+                    elif row['Low'] <= t['sl']:
+                        sl_hit_today += 1
+                        active_trades.remove(t)
+                elif t['type'] == 'SHORT':
+                    if row['Low'] <= t['target']:
+                        targets_hit_today += 1
+                        active_trades.remove(t)
+                    elif row['High'] >= t['sl']:
+                        sl_hit_today += 1
+                        active_trades.remove(t)
+                        
+            # 2. Check for New Signals
+            macd_bullish = row['MACD_Line'] > row['Signal_Line']
+            macd_bearish = row['MACD_Line'] < row['Signal_Line']
+            long_cond = (row['RSI'] > 60) and (row['Close'] > row['VWAP']) and macd_bullish
+            short_cond = (row['RSI'] < 40) and (row['Close'] < row['VWAP']) and macd_bearish
+            
+            prev_macd_bullish = row['Prev_MACD'] > row['Prev_Signal']
+            prev_macd_bearish = row['Prev_MACD'] < row['Prev_Signal']
+            prev_long_cond = (row['Prev_RSI'] > 60) and (row['Prev_Close'] > row['Prev_VWAP']) and prev_macd_bullish
+            prev_short_cond = (row['Prev_RSI'] < 40) and (row['Prev_Close'] < row['Prev_VWAP']) and prev_macd_bearish
+            
+            # Crossover logic: Only count when signal starts freshly
+            if long_cond and not prev_long_cond:
+                total_signals_today += 1
+                active_trades.append({'type': 'LONG', 'target': row['Close'] + 40, 'sl': row['Close'] - 20})
+            elif short_cond and not prev_short_cond:
+                total_signals_today += 1
+                active_trades.append({'type': 'SHORT', 'target': row['Close'] - 40, 'sl': row['Close'] + 20})
+
+        # --- 📌 LIVE SCORECARD DASHBOARD ---
+        st.subheader("📊 Today's Auto-Backtest Scorecard")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(label="Total Signals Triggered", value=total_signals_today)
+        with col2:
+            st.metric(label="🎯 Targets Hit (40 Pts)", value=targets_hit_today)
+        with col3:
+            st.metric(label="🛑 Stop Loss Hit (20 Pts)", value=sl_hit_today)
+        with col4:
+            total_closed = targets_hit_today + sl_hit_today
+            win_rate = (targets_hit_today / total_closed * 100) if total_closed > 0 else 0
+            st.metric(label="🏆 Win Rate (%)", value=f"{win_rate:.1f}%")
+        st.markdown("---")
+
         latest = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else latest
         close = latest['Close']
         
-        # --- 📌 Sidebar Menu with Expiry & Nifty 50 Lot Selection ---
+        # --- 📌 Sidebar Menu ---
         with st.sidebar:
             st.header("📈 Live Market")
             st.markdown("---")
@@ -94,24 +160,20 @@ if st.session_state['access_token']:
             st.metric(label="NIFTY 50 (Spot)", value=f"{close:,.2f}", delta=f"{change:.2f}")
             st.markdown("---")
             st.subheader("⚙️ Options Settings")
-            expiry_str = st.text_input("Enter Expiry (e.g., 23JUN - Tuesday)", "23JUN") 
-            
-            # NIFTY 50 Lot Selection (1 Lot = 65 Qty)
+            expiry_str = st.text_input("Enter Expiry (e.g., 23JUN)", "23JUN") 
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
             total_qty = num_lots * 65  
             st.write(f"Total Quantity to Trade: **{total_qty} shares**")
 
         # --- 🎯 PRO SIGNAL & LIVE ORDER EXECUTION ---
-        st.markdown("---")
-        st.subheader("🎯 Live NIFTY 50 Premium & Target")
+        st.subheader("🎯 Live Signal Alert")
         
         atm_strike = int(round(close / 50) * 50) 
+        macd_bullish_live = latest['MACD_Line'] > latest['Signal_Line']
+        macd_bearish_live = latest['MACD_Line'] < latest['Signal_Line']
         
-        macd_bullish = latest['MACD_Line'] > latest['Signal_Line']
-        macd_bearish = latest['MACD_Line'] < latest['Signal_Line']
-        
-        long_condition = (latest['RSI'] > 60) and (close > latest['VWAP']) and macd_bullish
-        short_condition = (latest['RSI'] < 40) and (close < latest['VWAP']) and macd_bearish
+        long_condition_live = (latest['RSI'] > 60) and (close > latest['VWAP']) and macd_bullish_live
+        short_condition_live = (latest['RSI'] < 40) and (close < latest['VWAP']) and macd_bearish_live
         
         def get_premium(opt_type):
             symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
@@ -123,17 +185,12 @@ if st.session_state['access_token']:
                 pass
             return 0.0
 
-        if long_condition:
+        if long_condition_live:
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
             st.success(f"### 🟢 MARKET GOING UP - BUY CE")
             if premium > 0:
-                st.markdown(f"""
-                **Buy Strike:** `{atm_strike} CE` | **Lots Selected:** {num_lots} ({total_qty} Qty)
-                * **Buy Zone (Premium):** ₹{premium - 2:.2f} to ₹{premium + 2:.2f}
-                * **Current Premium:** **₹{premium}**
-                * **Target:** ₹{premium + 20:.2f} | **Stop Loss:** ₹{premium - 10:.2f}
-                """)
+                st.markdown(f"**Buy Strike:** `{atm_strike} CE` | **Current Premium:** **₹{premium}**")
                 if st.button(f"🚀 BUY {atm_strike} CE ({num_lots} Lot)", type="primary"):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
@@ -145,17 +202,12 @@ if st.session_state['access_token']:
             else:
                 st.write(f"Buy Strike: {atm_strike} CE (Market Closed or Check Expiry Format)")
             
-        elif short_condition:
+        elif short_condition_live:
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
             st.error(f"### 🔴 MARKET GOING DOWN - BUY PE")
             if premium > 0:
-                st.markdown(f"""
-                **Buy Strike:** `{atm_strike} PE` | **Lots Selected:** {num_lots} ({total_qty} Qty)
-                * **Buy Zone (Premium):** ₹{premium - 2:.2f} to ₹{premium + 2:.2f}
-                * **Current Premium:** **₹{premium}**
-                * **Target:** ₹{premium + 20:.2f} | **Stop Loss:** ₹{premium - 10:.2f}
-                """)
+                st.markdown(f"**Buy Strike:** `{atm_strike} PE` | **Current Premium:** **₹{premium}**")
                 if st.button(f"🚀 BUY {atm_strike} PE ({num_lots} Lot)", type="primary"):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
