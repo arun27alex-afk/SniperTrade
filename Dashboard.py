@@ -1,9 +1,10 @@
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import pandas as pd
 from fyers_apiv3 import fyersModel
 import datetime
-import time # UPDATE: Added for Auto-refresh
+import time
 
 # ==========================================
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
@@ -68,6 +69,9 @@ if st.session_state['access_token']:
         df['VWAP'] = (df['Typical_Price'] * df['Volume']).cumsum() / df['Volume'].cumsum()
         df['VWAP'] = df['VWAP'].fillna(df['Close']) 
         
+        df['MA_20'] = df['Close'].rolling(window=20).mean()
+        df['MA_50'] = df['Close'].rolling(window=50).mean()
+        
         df['EMA_12'] = df['Close'].ewm(span=12, adjust=False).mean()
         df['EMA_26'] = df['Close'].ewm(span=26, adjust=False).mean()
         df['MACD_Line'] = df['EMA_12'] - df['EMA_26']
@@ -82,7 +86,7 @@ if st.session_state['access_token']:
         
         df = df.round(2)
         
-        # --- 🤖 AUTO-BACKTEST LOGIC FOR SCORECARD ---
+        # --- AUTO-BACKTEST LOGIC FOR SCORECARD ---
         total_signals_today = 0
         targets_hit_today = 0
         sl_hit_today = 0
@@ -97,7 +101,6 @@ if st.session_state['access_token']:
         for i in range(1, len(df)):
             row = df.iloc[i]
             
-            # 1. Check if ongoing trades hit Target or SL
             for t in active_trades[:]:
                 if t['type'] == 'LONG':
                     if row['High'] >= t['target']:
@@ -114,7 +117,6 @@ if st.session_state['access_token']:
                         sl_hit_today += 1
                         active_trades.remove(t)
                         
-            # 2. Check for New Signals
             macd_bullish = row['MACD_Line'] > row['Signal_Line']
             macd_bearish = row['MACD_Line'] < row['Signal_Line']
             long_cond = (row['RSI'] > 60) and (row['Close'] > row['VWAP']) and macd_bullish
@@ -125,7 +127,6 @@ if st.session_state['access_token']:
             prev_long_cond = (row['Prev_RSI'] > 60) and (row['Prev_Close'] > row['Prev_VWAP']) and prev_macd_bullish
             prev_short_cond = (row['Prev_RSI'] < 40) and (row['Prev_Close'] < row['Prev_VWAP']) and prev_macd_bearish
             
-            # Crossover logic: Only count when signal starts freshly
             if long_cond and not prev_long_cond:
                 total_signals_today += 1
                 active_trades.append({'type': 'LONG', 'target': row['Close'] + 40, 'sl': row['Close'] - 20})
@@ -133,7 +134,7 @@ if st.session_state['access_token']:
                 total_signals_today += 1
                 active_trades.append({'type': 'SHORT', 'target': row['Close'] - 40, 'sl': row['Close'] + 20})
 
-        # --- 📌 LIVE SCORECARD DASHBOARD ---
+        # --- LIVE SCORECARD DASHBOARD ---
         st.subheader("📊 Today's Auto-Backtest Scorecard")
         col1, col2, col3, col4 = st.columns(4)
         
@@ -153,7 +154,7 @@ if st.session_state['access_token']:
         prev = df.iloc[-2] if len(df) > 1 else latest
         close = latest['Close']
         
-        # --- 📌 Sidebar Menu ---
+        # --- Sidebar Menu ---
         with st.sidebar:
             st.header("📈 Live Market")
             st.markdown("---")
@@ -163,14 +164,13 @@ if st.session_state['access_token']:
             st.subheader("⚙️ Options Settings")
             expiry_str = st.text_input("Enter Expiry (e.g., 24JUN)", "24JUN") 
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
-            total_qty = num_lots * 25  # Nifty lot size is 25
+            total_qty = num_lots * 25  
             st.write(f"Total Quantity to Trade: **{total_qty} shares**")
             
-            # --- 🔄 AUTO REFRESH TOGGLE ---
             st.markdown("---")
             auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
-        # --- 🎯 PRO SIGNAL & LIVE ORDER EXECUTION ---
+        # --- LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal Alert")
         
         atm_strike = int(round(close / 50) * 50) 
@@ -190,7 +190,6 @@ if st.session_state['access_token']:
                 pass
             return 0.0
 
-        # --- BUY CE LOGIC ---
         if long_condition_live:
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
@@ -198,14 +197,11 @@ if st.session_state['access_token']:
             
             if premium > 0:
                 st.markdown(f"**Strike:** `{atm_strike} CE` | **Symbol:** `{opt_symbol}`")
-                
-                # Trade Levels Display
                 t_col1, t_col2, t_col3 = st.columns(3)
                 t_col1.metric("Entry Price (LTP)", f"₹{premium}")
                 t_col2.metric("🎯 Target (+40 Pts)", f"₹{round(premium + 40, 2)}")
                 t_col3.metric("🛑 Stop Loss (-20 Pts)", f"₹{round(premium - 20, 2)}")
                 
-                # Direct Execution Button
                 if st.button(f"🚀 BUY {atm_strike} CE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
@@ -217,7 +213,6 @@ if st.session_state['access_token']:
             else:
                 st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Format Incorrect ({expiry_str})**")
                 
-        # --- BUY PE LOGIC ---
         elif short_condition_live:
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
@@ -225,14 +220,11 @@ if st.session_state['access_token']:
             
             if premium > 0:
                 st.markdown(f"**Strike:** `{atm_strike} PE` | **Symbol:** `{opt_symbol}`")
-                
-                # Trade Levels Display
                 t_col1, t_col2, t_col3 = st.columns(3)
                 t_col1.metric("Entry Price (LTP)", f"₹{premium}")
                 t_col2.metric("🎯 Target (+40 Pts)", f"₹{round(premium + 40, 2)}")
                 t_col3.metric("🛑 Stop Loss (-20 Pts)", f"₹{round(premium - 20, 2)}")
                 
-                # Direct Execution Button
                 if st.button(f"🚀 BUY {atm_strike} PE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
@@ -248,23 +240,36 @@ if st.session_state['access_token']:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
             st.markdown(f"**Current NIFTY 50 Trend is Weak or Sideways.** \n* Spot Price: {close} \n* RSI: {latest['RSI']:.2f}")
 
-        # --- 📊 Live Market Chart ---
+        # --- 📊 PRO INTERACTIVE CHART ---
         st.markdown("---")
-        st.subheader("📊 Live NIFTY 50 Chart")
-        fig = go.Figure(data=[go.Candlestick(x=df['Timestamp'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Candlestick')])
-        fig.update_traces(increasing_line_color='#26a69a', increasing_fillcolor='#26a69a', decreasing_line_color='#ef5350', decreasing_fillcolor='#ef5350')
-        fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['VWAP'], line=dict(color='#795548', width=1.5, dash='dash'), name='VWAP'))
+        st.subheader("📊 Live NIFTY 50 Pro Chart")
+        
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.75, 0.25])
+
+        # Candlestick & Moving Averages
+        fig.add_trace(go.Candlestick(x=df['Timestamp'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Candles'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['VWAP'], line=dict(color='#795548', width=2, dash='dash'), name='VWAP'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MA_20'], line=dict(color='#2196f3', width=1.5), name='MA 20'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MA_50'], line=dict(color='#f44336', width=1.5), name='MA 50'), row=1, col=1)
+
+        # MACD Subplot
+        fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MACD_Line'], line=dict(color='#2196f3', width=1.5), name='MACD'), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['Signal_Line'], line=dict(color='#ff9800', width=1.5), name='Signal'), row=2, col=1)
 
         fig.update_layout(
-            plot_bgcolor='white', paper_bgcolor='white', height=600, margin=dict(l=10, r=50, t=30, b=80),
-            dragmode='pan',
-            xaxis=dict(gridcolor='#f2f2f2', linecolor='#e0e0e0', rangeslider_visible=False),
-            yaxis=dict(gridcolor='#f2f2f2', linecolor='#e0e0e0', side='right', fixedrange=False),
-            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
+            plot_bgcolor='white', paper_bgcolor='white', height=750, margin=dict(l=10, r=10, t=30, b=10),
+            dragmode='pan', 
+            hovermode='x unified',
+            showlegend=False
         )
-        st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
         
-        # --- 🔄 TRIGGER AUTO REFRESH ---
+        # Enable Touch Zooming & Panning
+        fig.update_xaxes(fixedrange=False, rangeslider_visible=False)
+        fig.update_yaxes(fixedrange=False)
+
+        st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
+        
+        # --- TRIGGER AUTO REFRESH ---
         if auto_refresh:
             time.sleep(10)
             st.rerun()
