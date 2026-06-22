@@ -256,18 +256,25 @@ if st.session_state['access_token']:
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MACD_Line'], line=dict(color='#2196f3', width=1.5), name='MACD'), row=2, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['Signal_Line'], line=dict(color='#ff9800', width=1.5), name='Signal'), row=2, col=1)
 
+        # Reduce height slightly for better mobile scrolling
         fig.update_layout(
-            plot_bgcolor='white', paper_bgcolor='white', height=750, margin=dict(l=10, r=10, t=30, b=10),
+            plot_bgcolor='white', paper_bgcolor='white', height=650, margin=dict(l=10, r=10, t=30, b=10),
             dragmode='pan', 
             hovermode='x unified',
             showlegend=False
         )
         
-        # Enable Touch Zooming & Panning
         fig.update_xaxes(fixedrange=False, rangeslider_visible=False)
         fig.update_yaxes(fixedrange=False)
 
-        st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
+        # ✨ THE FIX FOR MOBILE ZOOM & PAN ✨
+        chart_config = {
+            'scrollZoom': True, 
+            'displayModeBar': True, # Enables the toolbar
+            'displaylogo': False
+        }
+        
+        st.plotly_chart(fig, use_container_width=True, config=chart_config)
         
         # --- TRIGGER AUTO REFRESH ---
         if auto_refresh:
