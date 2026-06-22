@@ -62,7 +62,9 @@ if st.session_state['access_token']:
     if res.get("s") == "ok":
         df = pd.DataFrame(res['candles'])
         df.columns = ['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume']
-        df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata').dt.strftime('%H:%M')
+        
+        # Keep Datetime for correct Zooming on Time Axis
+        df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
         
         # --- Indicators ---
         df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
@@ -86,10 +88,11 @@ if st.session_state['access_token']:
         
         df = df.round(2)
         
-        # --- AUTO-BACKTEST LOGIC FOR SCORECARD ---
+        # --- 🤖 AUTO-BACKTEST LOGIC (WITH STEP TSL) ---
         total_signals_today = 0
         targets_hit_today = 0
         sl_hit_today = 0
+        cost_to_cost_today = 0
         active_trades = []
 
         df['Prev_RSI'] = df['RSI'].shift(1)
@@ -103,20 +106,34 @@ if st.session_state['access_token']:
             
             for t in active_trades[:]:
                 if t['type'] == 'LONG':
+                    # Step TSL Logic
+                    if not t['tsl_activated'] and row['High'] >= t['entry'] + 20:
+                        t['sl'] = t['entry'] # Move SL to Cost
+                        t['tsl_activated'] = True
+                        
                     if row['High'] >= t['target']:
                         targets_hit_today += 1
                         active_trades.remove(t)
                     elif row['Low'] <= t['sl']:
-                        sl_hit_today += 1
+                        if t['tsl_activated']: cost_to_cost_today += 1
+                        else: sl_hit_today += 1
                         active_trades.remove(t)
+                        
                 elif t['type'] == 'SHORT':
+                    # Step TSL Logic
+                    if not t['tsl_activated'] and row['Low'] <= t['entry'] - 20:
+                        t['sl'] = t['entry'] # Move SL to Cost
+                        t['tsl_activated'] = True
+                        
                     if row['Low'] <= t['target']:
                         targets_hit_today += 1
                         active_trades.remove(t)
                     elif row['High'] >= t['sl']:
-                        sl_hit_today += 1
+                        if t['tsl_activated']: cost_to_cost_today += 1
+                        else: sl_hit_today += 1
                         active_trades.remove(t)
                         
+            # New Signal Conditions
             macd_bullish = row['MACD_Line'] > row['Signal_Line']
             macd_bearish = row['MACD_Line'] < row['Signal_Line']
             long_cond = (row['RSI'] > 60) and (row['Close'] > row['VWAP']) and macd_bullish
@@ -129,32 +146,30 @@ if st.session_state['access_token']:
             
             if long_cond and not prev_long_cond:
                 total_signals_today += 1
-                active_trades.append({'type': 'LONG', 'target': row['Close'] + 40, 'sl': row['Close'] - 20})
+                active_trades.append({'type': 'LONG', 'entry': row['Close'], 'target': row['Close'] + 40, 'sl': row['Close'] - 20, 'tsl_activated': False})
             elif short_cond and not prev_short_cond:
                 total_signals_today += 1
-                active_trades.append({'type': 'SHORT', 'target': row['Close'] - 40, 'sl': row['Close'] + 20})
+                active_trades.append({'type': 'SHORT', 'entry': row['Close'], 'target': row['Close'] - 40, 'sl': row['Close'] + 20, 'tsl_activated': False})
 
-        # --- LIVE SCORECARD DASHBOARD ---
+        # --- 📌 LIVE SCORECARD DASHBOARD ---
         st.subheader("📊 Today's Auto-Backtest Scorecard")
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
-        with col1:
-            st.metric(label="Total Signals Triggered", value=total_signals_today)
-        with col2:
-            st.metric(label="🎯 Targets Hit (40 Pts)", value=targets_hit_today)
-        with col3:
-            st.metric(label="🛑 Stop Loss Hit (20 Pts)", value=sl_hit_today)
-        with col4:
-            total_closed = targets_hit_today + sl_hit_today
+        with col1: st.metric("Signals Triggered", total_signals_today)
+        with col2: st.metric("🎯 Targets (40 Pts)", targets_hit_today)
+        with col3: st.metric("🛡️ Cost-to-Cost (Zero Loss)", cost_to_cost_today)
+        with col4: st.metric("🛑 Stop Loss (20 Pts)", sl_hit_today)
+        with col5:
+            total_closed = targets_hit_today + sl_hit_today + cost_to_cost_today
             win_rate = (targets_hit_today / total_closed * 100) if total_closed > 0 else 0
-            st.metric(label="🏆 Win Rate (%)", value=f"{win_rate:.1f}%")
+            st.metric("🏆 Win Rate (%)", f"{win_rate:.1f}%")
         st.markdown("---")
 
         latest = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else latest
         close = latest['Close']
         
-        # --- Sidebar Menu ---
+        # --- 📌 Sidebar Menu ---
         with st.sidebar:
             st.header("📈 Live Market")
             st.markdown("---")
@@ -165,12 +180,12 @@ if st.session_state['access_token']:
             expiry_str = st.text_input("Enter Expiry (e.g., 24JUN)", "24JUN") 
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
             total_qty = num_lots * 25  
-            st.write(f"Total Quantity to Trade: **{total_qty} shares**")
+            st.write(f"Total Quantity: **{total_qty} shares**")
             
             st.markdown("---")
             auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
-        # --- LIVE SIGNAL ALERT ---
+        # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal Alert")
         
         atm_strike = int(round(close / 50) * 50) 
@@ -246,37 +261,26 @@ if st.session_state['access_token']:
         
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.75, 0.25])
 
-        # Candlestick & Moving Averages
         fig.add_trace(go.Candlestick(x=df['Timestamp'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Candles'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['VWAP'], line=dict(color='#795548', width=2, dash='dash'), name='VWAP'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MA_20'], line=dict(color='#2196f3', width=1.5), name='MA 20'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MA_50'], line=dict(color='#f44336', width=1.5), name='MA 50'), row=1, col=1)
 
-        # MACD Subplot
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MACD_Line'], line=dict(color='#2196f3', width=1.5), name='MACD'), row=2, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['Signal_Line'], line=dict(color='#ff9800', width=1.5), name='Signal'), row=2, col=1)
 
-        # Reduce height slightly for better mobile scrolling
         fig.update_layout(
             plot_bgcolor='white', paper_bgcolor='white', height=650, margin=dict(l=10, r=10, t=30, b=10),
-            dragmode='pan', 
-            hovermode='x unified',
-            showlegend=False
+            dragmode='pan', hovermode='x unified', showlegend=False
         )
         
-        fig.update_xaxes(fixedrange=False, rangeslider_visible=False)
+        fig.update_xaxes(fixedrange=False, rangeslider_visible=False, tickformat="%H:%M")
         fig.update_yaxes(fixedrange=False)
 
-        # ✨ THE FIX FOR MOBILE ZOOM & PAN ✨
-        chart_config = {
-            'scrollZoom': True, 
-            'displayModeBar': True, # Enables the toolbar
-            'displaylogo': False
-        }
-        
+        chart_config = {'scrollZoom': True, 'displayModeBar': True, 'displaylogo': False}
         st.plotly_chart(fig, use_container_width=True, config=chart_config)
         
-        # --- TRIGGER AUTO REFRESH ---
+        # --- 🔄 TRIGGER AUTO REFRESH ---
         if auto_refresh:
             time.sleep(10)
             st.rerun()
