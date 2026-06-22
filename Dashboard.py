@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from fyers_apiv3 import fyersModel
 import datetime
+import time # UPDATE: Added for Auto-refresh
 
 # ==========================================
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
@@ -160,10 +161,14 @@ if st.session_state['access_token']:
             st.metric(label="NIFTY 50 (Spot)", value=f"{close:,.2f}", delta=f"{change:.2f}")
             st.markdown("---")
             st.subheader("⚙️ Options Settings")
-            expiry_str = st.text_input("Enter Expiry (e.g., 23JUN)", "23JUN") 
+            expiry_str = st.text_input("Enter Expiry (e.g., 24JUN)", "24JUN") 
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
-            total_qty = num_lots * 65  
+            total_qty = num_lots * 25  # Nifty lot size is 25
             st.write(f"Total Quantity to Trade: **{total_qty} shares**")
+            
+            # --- 🔄 AUTO REFRESH TOGGLE ---
+            st.markdown("---")
+            auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
         # --- 🎯 PRO SIGNAL & LIVE ORDER EXECUTION ---
         st.subheader("🎯 Live Signal Alert")
@@ -185,13 +190,23 @@ if st.session_state['access_token']:
                 pass
             return 0.0
 
+        # --- BUY CE LOGIC ---
         if long_condition_live:
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
             st.success(f"### 🟢 MARKET GOING UP - BUY CE")
+            
             if premium > 0:
-                st.markdown(f"**Buy Strike:** `{atm_strike} CE` | **Current Premium:** **₹{premium}**")
-                if st.button(f"🚀 BUY {atm_strike} CE ({num_lots} Lot)", type="primary"):
+                st.markdown(f"**Strike:** `{atm_strike} CE` | **Symbol:** `{opt_symbol}`")
+                
+                # Trade Levels Display
+                t_col1, t_col2, t_col3 = st.columns(3)
+                t_col1.metric("Entry Price (LTP)", f"₹{premium}")
+                t_col2.metric("🎯 Target (+40 Pts)", f"₹{round(premium + 40, 2)}")
+                t_col3.metric("🛑 Stop Loss (-20 Pts)", f"₹{round(premium - 20, 2)}")
+                
+                # Direct Execution Button
+                if st.button(f"🚀 BUY {atm_strike} CE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
                     if order_res.get("s") == "ok":
@@ -200,15 +215,25 @@ if st.session_state['access_token']:
                     else:
                         st.error(f"❌ Order Failed: {order_res.get('message')}")
             else:
-                st.write(f"Buy Strike: {atm_strike} CE (Market Closed or Check Expiry Format)")
-            
+                st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Format Incorrect ({expiry_str})**")
+                
+        # --- BUY PE LOGIC ---
         elif short_condition_live:
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
             st.error(f"### 🔴 MARKET GOING DOWN - BUY PE")
+            
             if premium > 0:
-                st.markdown(f"**Buy Strike:** `{atm_strike} PE` | **Current Premium:** **₹{premium}**")
-                if st.button(f"🚀 BUY {atm_strike} PE ({num_lots} Lot)", type="primary"):
+                st.markdown(f"**Strike:** `{atm_strike} PE` | **Symbol:** `{opt_symbol}`")
+                
+                # Trade Levels Display
+                t_col1, t_col2, t_col3 = st.columns(3)
+                t_col1.metric("Entry Price (LTP)", f"₹{premium}")
+                t_col2.metric("🎯 Target (+40 Pts)", f"₹{round(premium + 40, 2)}")
+                t_col3.metric("🛑 Stop Loss (-20 Pts)", f"₹{round(premium - 20, 2)}")
+                
+                # Direct Execution Button
+                if st.button(f"🚀 BUY {atm_strike} PE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
                     if order_res.get("s") == "ok":
@@ -217,11 +242,11 @@ if st.session_state['access_token']:
                     else:
                         st.error(f"❌ Order Failed: {order_res.get('message')}")
             else:
-                st.write(f"Buy Strike: {atm_strike} PE (Market Closed or Check Expiry Format)")
-            
+                st.warning(f"Strike: {atm_strike} PE - **Market Closed or Expiry Format Incorrect ({expiry_str})**")
+                
         else:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
-            st.markdown(f"**Current NIFTY 50 Trend is Weak.** \n* Spot Price: {close} \n* RSI: {latest['RSI']:.2f}")
+            st.markdown(f"**Current NIFTY 50 Trend is Weak or Sideways.** \n* Spot Price: {close} \n* RSI: {latest['RSI']:.2f}")
 
         # --- 📊 Live Market Chart ---
         st.markdown("---")
@@ -238,3 +263,8 @@ if st.session_state['access_token']:
             legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
         )
         st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
+        
+        # --- 🔄 TRIGGER AUTO REFRESH ---
+        if auto_refresh:
+            time.sleep(10)
+            st.rerun()
