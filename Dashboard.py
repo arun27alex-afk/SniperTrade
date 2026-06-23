@@ -195,6 +195,9 @@ if st.session_state['access_token']:
         long_condition_live = (latest['RSI'] > 60) and (close > latest['VWAP']) and macd_bullish_live
         short_condition_live = (latest['RSI'] < 40) and (close < latest['VWAP']) and macd_bearish_live
         
+        # Calculate Signal Time
+        signal_time = latest['Timestamp'].strftime('%I:%M %p') if 'Timestamp' in df.columns else "Live"
+        
         def get_premium(opt_type):
             symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
             try:
@@ -208,15 +211,23 @@ if st.session_state['access_token']:
         if long_condition_live:
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
-            st.success(f"### 🟢 MARKET GOING UP - BUY CE")
+            st.success(f"### 🟢 MARKET GOING UP - BUY CE (Signal Alert @ {signal_time})")
             
             if premium > 0:
-                st.markdown(f"**Strike:** `{atm_strike} CE` | **Symbol:** `{opt_symbol}`")
-                t_col1, t_col2, t_col3 = st.columns(3)
-                t_col1.metric("Entry Price (LTP)", f"₹{premium}")
-                t_col2.metric("🎯 Target (+40 Pts)", f"₹{round(premium + 40, 2)}")
-                t_col3.metric("🛑 Stop Loss (-20 Pts)", f"₹{round(premium - 20, 2)}")
+                st.markdown(f"**Symbol:** `{opt_symbol}`")
                 
+                t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
+                t_col1.metric("📌 Strike Rate", f"{atm_strike} CE")
+                t_col2.metric("🚪 Entry Price", f"₹{premium}")
+                t_col3.metric("🎯 Target (+40)", f"₹{round(premium + 40, 2)}")
+                t_col4.metric("🛑 Stop Loss (-20)", f"₹{round(premium - 20, 2)}")
+                t_col5.metric("⏰ Signal Time", signal_time)
+                
+                # English Info Alert for Safe Entry
+                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n"
+                        f"⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
+                
+                st.write("") 
                 if st.button(f"🚀 BUY {atm_strike} CE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
@@ -226,20 +237,28 @@ if st.session_state['access_token']:
                     else:
                         st.error(f"❌ Order Failed: {order_res.get('message')}")
             else:
-                st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Format Incorrect ({expiry_str})**")
+                st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Format Incorrect (Check Expiry: {expiry_str})**")
                 
         elif short_condition_live:
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
-            st.error(f"### 🔴 MARKET GOING DOWN - BUY PE")
+            st.error(f"### 🔴 MARKET GOING DOWN - BUY PE (Signal Alert @ {signal_time})")
             
             if premium > 0:
-                st.markdown(f"**Strike:** `{atm_strike} PE` | **Symbol:** `{opt_symbol}`")
-                t_col1, t_col2, t_col3 = st.columns(3)
-                t_col1.metric("Entry Price (LTP)", f"₹{premium}")
-                t_col2.metric("🎯 Target (+40 Pts)", f"₹{round(premium + 40, 2)}")
-                t_col3.metric("🛑 Stop Loss (-20 Pts)", f"₹{round(premium - 20, 2)}")
+                st.markdown(f"**Symbol:** `{opt_symbol}`")
                 
+                t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
+                t_col1.metric("📌 Strike Rate", f"{atm_strike} PE")
+                t_col2.metric("🚪 Entry Price", f"₹{premium}")
+                t_col3.metric("🎯 Target (+40)", f"₹{round(premium + 40, 2)}")
+                t_col4.metric("🛑 Stop Loss (-20)", f"₹{round(premium - 20, 2)}")
+                t_col5.metric("⏰ Signal Time", signal_time)
+                
+                # English Info Alert for Safe Entry
+                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n"
+                        f"⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
+                
+                st.write("") 
                 if st.button(f"🚀 BUY {atm_strike} PE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
@@ -249,7 +268,7 @@ if st.session_state['access_token']:
                     else:
                         st.error(f"❌ Order Failed: {order_res.get('message')}")
             else:
-                st.warning(f"Strike: {atm_strike} PE - **Market Closed or Expiry Format Incorrect ({expiry_str})**")
+                st.warning(f"Strike: {atm_strike} PE - **Market Closed or Expiry Format Incorrect (Check Expiry: {expiry_str})**")
                 
         else:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
