@@ -179,7 +179,7 @@ if st.session_state['access_token']:
             st.subheader("⚙️ Options Settings")
             expiry_str = st.text_input("Enter Expiry (e.g., 24JUN)", "24JUN") 
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
-            total_qty = num_lots * 25  
+            total_qty = num_lots * 65  
             st.write(f"Total Quantity: **{total_qty} shares**")
             
             st.markdown("---")
