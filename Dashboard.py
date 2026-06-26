@@ -15,6 +15,62 @@ REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/"
 # ==========================================
 
 st.set_page_config(page_title="Sniper Trade App - Nifty 50", page_icon="🎯", layout="wide")
+
+# --- STRATEGY FUNCTIONS & AUDIO ALERT LOGIC ---
+def play_alert_sound():
+    sound_url = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+    audio_html = f"""
+        <audio autoplay="true">
+            <source src="{sound_url}" type="audio/mpeg">
+        </audio>
+    """
+    st.components.v1.html(audio_html, width=0, height=0, scrolling=False)
+
+def get_ce_signal_and_checklist(data):
+    conditions_met = 0
+    checklist = {
+        "EMA 9/21 (9 EMA > 21 EMA)": False,
+        "VWAP (Price > VWAP)": False,
+        "RSI (Between 40-60)": False,
+        "MACD (MACD Line > Signal Line)": False,
+        "Volume (Above 20-period SMA)": False
+    }
+    if data['EMA_9'] > data['EMA_21']:
+        conditions_met += 1; checklist["EMA 9/21 (9 EMA > 21 EMA)"] = True
+    if data['Close'] > data['VWAP']:
+        conditions_met += 1; checklist["VWAP (Price > VWAP)"] = True
+    if 40 <= data['RSI'] <= 60: 
+        conditions_met += 1; checklist["RSI (Between 40-60)"] = True
+    if data['MACD_Line'] > data['Signal_Line']:
+        conditions_met += 1; checklist["MACD (MACD Line > Signal Line)"] = True
+    if data['Volume'] > data['Volume_SMA_20']:
+        conditions_met += 1; checklist["Volume (Above 20-period SMA)"] = True
+    
+    return conditions_met >= 4, checklist
+
+def get_pe_signal_and_checklist(data):
+    conditions_met = 0
+    checklist = {
+        "EMA 9/21 (9 EMA < 21 EMA)": False,
+        "VWAP (Price < VWAP)": False,
+        "RSI (Between 40-60)": False,
+        "MACD (MACD Line < Signal Line)": False,
+        "Volume (Above 20-period SMA)": False
+    }
+    if data['EMA_9'] < data['EMA_21']:
+        conditions_met += 1; checklist["EMA 9/21 (9 EMA < 21 EMA)"] = True
+    if data['Close'] < data['VWAP']:
+        conditions_met += 1; checklist["VWAP (Price < VWAP)"] = True
+    if 40 <= data['RSI'] <= 60: 
+        conditions_met += 1; checklist["RSI (Between 40-60)"] = True
+    if data['MACD_Line'] < data['Signal_Line']:
+        conditions_met += 1; checklist["MACD (MACD Line < Signal Line)"] = True
+    if data['Volume'] > data['Volume_SMA_20']:
+        conditions_met += 1; checklist["Volume (Above 20-period SMA)"] = True
+    
+    return conditions_met >= 4, checklist
+# -----------------------------------------------
+
 st.title("🎯 Sniper Trade App (NIFTY 50 Live & Algo Execution)")
 st.markdown("---")
 
@@ -74,6 +130,11 @@ if st.session_state['access_token']:
         df['MA_20'] = df['Close'].rolling(window=20).mean()
         df['MA_50'] = df['Close'].rolling(window=50).mean()
         
+        # Adding new indicators required for the 4/5 logic
+        df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
+        df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
+        df['Volume_SMA_20'] = df['Volume'].rolling(window=20).mean()
+        
         df['EMA_12'] = df['Close'].ewm(span=12, adjust=False).mean()
         df['EMA_26'] = df['Close'].ewm(span=26, adjust=False).mean()
         df['MACD_Line'] = df['EMA_12'] - df['EMA_26']
@@ -95,20 +156,14 @@ if st.session_state['access_token']:
         cost_to_cost_today = 0
         active_trades = []
 
-        df['Prev_RSI'] = df['RSI'].shift(1)
-        df['Prev_Close'] = df['Close'].shift(1)
-        df['Prev_VWAP'] = df['VWAP'].shift(1)
-        df['Prev_MACD'] = df['MACD_Line'].shift(1)
-        df['Prev_Signal'] = df['Signal_Line'].shift(1)
-
         for i in range(1, len(df)):
             row = df.iloc[i]
+            prev_row = df.iloc[i-1]
             
             for t in active_trades[:]:
                 if t['type'] == 'LONG':
-                    # Step TSL Logic
                     if not t['tsl_activated'] and row['High'] >= t['entry'] + 20:
-                        t['sl'] = t['entry'] # Move SL to Cost
+                        t['sl'] = t['entry'] 
                         t['tsl_activated'] = True
                         
                     if row['High'] >= t['target']:
@@ -120,9 +175,8 @@ if st.session_state['access_token']:
                         active_trades.remove(t)
                         
                 elif t['type'] == 'SHORT':
-                    # Step TSL Logic
                     if not t['tsl_activated'] and row['Low'] <= t['entry'] - 20:
-                        t['sl'] = t['entry'] # Move SL to Cost
+                        t['sl'] = t['entry'] 
                         t['tsl_activated'] = True
                         
                     if row['Low'] <= t['target']:
@@ -133,16 +187,12 @@ if st.session_state['access_token']:
                         else: sl_hit_today += 1
                         active_trades.remove(t)
                         
-            # New Signal Conditions
-            macd_bullish = row['MACD_Line'] > row['Signal_Line']
-            macd_bearish = row['MACD_Line'] < row['Signal_Line']
-            long_cond = (row['RSI'] > 60) and (row['Close'] > row['VWAP']) and macd_bullish
-            short_cond = (row['RSI'] < 40) and (row['Close'] < row['VWAP']) and macd_bearish
+            # New 4/5 Signal Logic for Backtesting
+            long_cond, _ = get_ce_signal_and_checklist(row)
+            short_cond, _ = get_pe_signal_and_checklist(row)
             
-            prev_macd_bullish = row['Prev_MACD'] > row['Prev_Signal']
-            prev_macd_bearish = row['Prev_MACD'] < row['Prev_Signal']
-            prev_long_cond = (row['Prev_RSI'] > 60) and (row['Prev_Close'] > row['Prev_VWAP']) and prev_macd_bullish
-            prev_short_cond = (row['Prev_RSI'] < 40) and (row['Prev_Close'] < row['Prev_VWAP']) and prev_macd_bearish
+            prev_long_cond, _ = get_ce_signal_and_checklist(prev_row)
+            prev_short_cond, _ = get_pe_signal_and_checklist(prev_row)
             
             if long_cond and not prev_long_cond:
                 total_signals_today += 1
@@ -189,14 +239,11 @@ if st.session_state['access_token']:
         st.subheader("🎯 Live Signal Alert")
         
         atm_strike = int(round(close / 50) * 50) 
-        macd_bullish_live = latest['MACD_Line'] > latest['Signal_Line']
-        macd_bearish_live = latest['MACD_Line'] < latest['Signal_Line']
-        
-        long_condition_live = (latest['RSI'] > 60) and (close > latest['VWAP']) and macd_bullish_live
-        short_condition_live = (latest['RSI'] < 40) and (close < latest['VWAP']) and macd_bearish_live
-        
-        # Calculate Signal Time
         signal_time = latest['Timestamp'].strftime('%I:%M %p') if 'Timestamp' in df.columns else "Live"
+        
+        # Check Live Conditions using the new functions
+        long_condition_live, ce_checklist = get_ce_signal_and_checklist(latest)
+        short_condition_live, pe_checklist = get_pe_signal_and_checklist(latest)
         
         def get_premium(opt_type):
             symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
@@ -209,9 +256,18 @@ if st.session_state['access_token']:
             return 0.0
 
         if long_condition_live:
+            play_alert_sound()
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
+            
             st.success(f"### 🟢 MARKET GOING UP - BUY CE (Signal Alert @ {signal_time})")
+            
+            st.markdown("### 📊 Indicator Alignment Checklist")
+            for indicator, is_matched in ce_checklist.items():
+                if is_matched:
+                    st.markdown(f"✅ **{indicator}**: Aligned")
+                else:
+                    st.markdown(f"❌ **{indicator}**: Not Aligned")
             
             if premium > 0:
                 st.markdown(f"**Symbol:** `{opt_symbol}`")
@@ -223,7 +279,6 @@ if st.session_state['access_token']:
                 t_col4.metric("🛑 Stop Loss (-20)", f"₹{round(premium - 20, 2)}")
                 t_col5.metric("⏰ Signal Time", signal_time)
                 
-                # English Info Alert for Safe Entry
                 st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n"
                         f"⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 
@@ -240,9 +295,18 @@ if st.session_state['access_token']:
                 st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Format Incorrect (Check Expiry: {expiry_str})**")
                 
         elif short_condition_live:
+            play_alert_sound()
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
+            
             st.error(f"### 🔴 MARKET GOING DOWN - BUY PE (Signal Alert @ {signal_time})")
+            
+            st.markdown("### 📊 Indicator Alignment Checklist")
+            for indicator, is_matched in pe_checklist.items():
+                if is_matched:
+                    st.markdown(f"✅ **{indicator}**: Aligned")
+                else:
+                    st.markdown(f"❌ **{indicator}**: Not Aligned")
             
             if premium > 0:
                 st.markdown(f"**Symbol:** `{opt_symbol}`")
@@ -254,7 +318,6 @@ if st.session_state['access_token']:
                 t_col4.metric("🛑 Stop Loss (-20)", f"₹{round(premium - 20, 2)}")
                 t_col5.metric("⏰ Signal Time", signal_time)
                 
-                # English Info Alert for Safe Entry
                 st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n"
                         f"⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 
