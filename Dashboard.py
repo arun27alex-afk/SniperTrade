@@ -10,12 +10,12 @@ import time
 # ==========================================
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
-CLIENT_ID = "BT8FRQLN19-200"       
-SECRET_KEY = "0ivLeQN8vdI2VyKA"         
+CLIENT_ID = "***"       
+SECRET_KEY = "***"         
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/" 
 # ==========================================
 
-st.set_page_config(page_title="Sniper Trade App - Nifty 50", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Sniper Trade App - NIFTY 50", page_icon="🎯", layout="wide")
 
 # --- STRATEGY FUNCTIONS & AUDIO ALERT LOGIC ---
 def play_alert_sound():
@@ -31,32 +31,26 @@ def get_ce_signal_and_checklist(data, atr_min=4):
     score = 0
     checklist = {}
     
-    # 1. EMA (2 pts)
     if data['EMA_9'] > data['EMA_21']:
         score += 2; checklist["EMA 9/21 (9 EMA > 21 EMA) [+2 pts]"] = True
     else: checklist["EMA 9/21 (9 EMA > 21 EMA) [+2 pts]"] = False
         
-    # 2. VWAP (2 pts)
     if data['Close'] > data['VWAP']:
         score += 2; checklist["VWAP (Price > VWAP) [+2 pts]"] = True
     else: checklist["VWAP (Price > VWAP) [+2 pts]"] = False
         
-    # 3. ATR Sideways Filter (2 pts) -> Nifty 5-min realistic ATR is usually 4 to 15
     if data['ATR'] > atr_min:
         score += 2; checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = True
     else: checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = False
         
-    # 4. MACD (2 pts)
     if data['MACD_Line'] > data['Signal_Line']:
         score += 2; checklist["MACD (MACD > Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD > Signal) [+2 pts]"] = False
         
-    # 5. RSI (1 pt)
     if data['RSI'] > 60:
         score += 1; checklist["RSI (> 60 Bullish) [+1 pt]"] = True
     else: checklist["RSI (> 60 Bullish) [+1 pt]"] = False
         
-    # 6. Volume Surge (1 pt) -> 1.5x of Average Volume
     if data['Volume'] > (data['Volume_SMA_20'] * 1.5):
         score += 1; checklist["Volume Surge (> 1.5x Avg) [+1 pt]"] = True
     else: checklist["Volume Surge (> 1.5x Avg) [+1 pt]"] = False
@@ -67,32 +61,26 @@ def get_pe_signal_and_checklist(data, atr_min=4):
     score = 0
     checklist = {}
     
-    # 1. EMA (2 pts)
     if data['EMA_9'] < data['EMA_21']:
         score += 2; checklist["EMA 9/21 (9 EMA < 21 EMA) [+2 pts]"] = True
     else: checklist["EMA 9/21 (9 EMA < 21 EMA) [+2 pts]"] = False
         
-    # 2. VWAP (2 pts)
     if data['Close'] < data['VWAP']:
         score += 2; checklist["VWAP (Price < VWAP) [+2 pts]"] = True
     else: checklist["VWAP (Price < VWAP) [+2 pts]"] = False
         
-    # 3. ATR Sideways Filter (2 pts)
     if data['ATR'] > atr_min:
         score += 2; checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = True
     else: checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = False
         
-    # 4. MACD (2 pts)
     if data['MACD_Line'] < data['Signal_Line']:
         score += 2; checklist["MACD (MACD < Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD < Signal) [+2 pts]"] = False
         
-    # 5. RSI (1 pt)
     if data['RSI'] < 40:
         score += 1; checklist["RSI (< 40 Bearish) [+1 pt]"] = True
     else: checklist["RSI (< 40 Bearish) [+1 pt]"] = False
         
-    # 6. Volume Surge (1 pt) -> 1.5x of Average Volume
     if data['Volume'] > (data['Volume_SMA_20'] * 1.5):
         score += 1; checklist["Volume Surge (> 1.5x Avg) [+1 pt]"] = True
     else: checklist["Volume Surge (> 1.5x Avg) [+1 pt]"] = False
@@ -133,7 +121,14 @@ if not st.session_state['access_token']:
 if st.session_state['access_token']:
     fyers = fyersModel.FyersModel(client_id=CLIENT_ID, is_async=False, token=st.session_state['access_token'], log_path="")
     
-    today_date = datetime.date.today().strftime('%Y-%m-%d')
+    today = datetime.date.today()
+    if today.weekday() == 5: 
+        today_date = (today - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+    elif today.weekday() == 6: 
+        today_date = (today - datetime.timedelta(days=2)).strftime('%Y-%m-%d')
+    else:
+        today_date = today.strftime('%Y-%m-%d')
+
     data = {
         "symbol": "NSE:NIFTY50-INDEX",  
         "resolution": "5",
@@ -144,20 +139,16 @@ if st.session_state['access_token']:
     }
     res = fyers.history(data=data)
     
-    if res.get("s") == "ok":
+    if res.get("s") == "ok" and 'candles' in res and len(res['candles']) > 0:
         df = pd.DataFrame(res['candles'])
         df.columns = ['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume']
         
-        # Keep Datetime for correct Zooming on Time Axis
         df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
         
         # --- Indicators ---
         df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
         df['VWAP'] = (df['Typical_Price'] * df['Volume']).cumsum() / df['Volume'].cumsum()
         df['VWAP'] = df['VWAP'].fillna(df['Close']) 
-        
-        df['MA_20'] = df['Close'].rolling(window=20).mean()
-        df['MA_50'] = df['Close'].rolling(window=50).mean()
         
         df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
         df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
@@ -175,23 +166,28 @@ if st.session_state['access_token']:
         df['RSI'] = 100 - (100 / (1 + rs))
         df['RSI'] = df['RSI'].fillna(50)
         
-        # --- ATR Calculation ---
         df['Prev_Close'] = df['Close'].shift(1)
         tr1 = df['High'] - df['Low']
         tr2 = (df['High'] - df['Prev_Close']).abs()
         tr3 = (df['Low'] - df['Prev_Close']).abs()
         df['TR'] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
         df['ATR'] = df['TR'].rolling(window=14).mean()
-        df['ATR'] = df['ATR'].fillna(10) # default value to avoid errors
+        df['ATR'] = df['ATR'].fillna(10)
         
         df = df.round(2)
         
-        # --- 🤖 AUTO-BACKTEST LOGIC ---
+        # --- 🤖 AUTO-BACKTEST & CHART MARKERS LOGIC ---
         total_signals_today = 0
         targets_hit_today = 0
         sl_hit_today = 0
         cost_to_cost_today = 0
         active_trades = []
+        
+        # Lists to hold Chart UI Markers
+        buy_x, buy_y = [], []
+        sell_x, sell_y = [], []
+        latest_active_sl = None
+        latest_active_tp = None
 
         for i in range(1, len(df)):
             row = df.iloc[i]
@@ -199,7 +195,6 @@ if st.session_state['access_token']:
             
             for t in active_trades[:]:
                 if t['type'] == 'LONG':
-                    # Step TSL Logic - Move SL to entry if price goes up by 1.5x ATR
                     if not t['tsl_activated'] and row['High'] >= t['entry'] + t['atr_val']:
                         t['sl'] = t['entry'] 
                         t['tsl_activated'] = True
@@ -207,13 +202,14 @@ if st.session_state['access_token']:
                     if row['High'] >= t['target']:
                         targets_hit_today += 1
                         active_trades.remove(t)
+                        latest_active_sl, latest_active_tp = None, None
                     elif row['Low'] <= t['sl']:
                         if t['tsl_activated']: cost_to_cost_today += 1
                         else: sl_hit_today += 1
                         active_trades.remove(t)
+                        latest_active_sl, latest_active_tp = None, None
                         
                 elif t['type'] == 'SHORT':
-                    # Step TSL Logic
                     if not t['tsl_activated'] and row['Low'] <= t['entry'] - t['atr_val']:
                         t['sl'] = t['entry'] 
                         t['tsl_activated'] = True
@@ -221,27 +217,36 @@ if st.session_state['access_token']:
                     if row['Low'] <= t['target']:
                         targets_hit_today += 1
                         active_trades.remove(t)
+                        latest_active_sl, latest_active_tp = None, None
                     elif row['High'] >= t['sl']:
                         if t['tsl_activated']: cost_to_cost_today += 1
                         else: sl_hit_today += 1
                         active_trades.remove(t)
-                        
-            # Backtest Signal Logic (Score >= 7 is STRONG)
+                        latest_active_sl, latest_active_tp = None, None
+
             ce_score, _ = get_ce_signal_and_checklist(row)
             pe_score, _ = get_pe_signal_and_checklist(row)
             prev_ce_score, _ = get_ce_signal_and_checklist(prev_row)
             prev_pe_score, _ = get_pe_signal_and_checklist(prev_row)
             
-            # Dynamic SL and Target points based on ATR (for Spot Backtesting)
             sl_points = round(1.5 * row['ATR'], 2)
             target_points = round(2.5 * row['ATR'], 2)
             
             if ce_score >= 7 and prev_ce_score < 7:
                 total_signals_today += 1
                 active_trades.append({'type': 'LONG', 'entry': row['Close'], 'target': row['Close'] + target_points, 'sl': row['Close'] - sl_points, 'atr_val': row['ATR'], 'tsl_activated': False})
+                buy_x.append(row['Timestamp'])
+                buy_y.append(row['Low'] - 15) 
+                latest_active_sl = row['Close'] - sl_points
+                latest_active_tp = row['Close'] + target_points
+                
             elif pe_score >= 7 and prev_pe_score < 7:
                 total_signals_today += 1
                 active_trades.append({'type': 'SHORT', 'entry': row['Close'], 'target': row['Close'] - target_points, 'sl': row['Close'] + sl_points, 'atr_val': row['ATR'], 'tsl_activated': False})
+                sell_x.append(row['Timestamp'])
+                sell_y.append(row['High'] + 15) 
+                latest_active_sl = row['Close'] + sl_points
+                latest_active_tp = row['Close'] - target_points
 
         # --- 📌 LIVE SCORECARD DASHBOARD ---
         st.subheader("📊 Today's Auto-Backtest Scorecard")
@@ -262,8 +267,6 @@ if st.session_state['access_token']:
         close = latest['Close']
         current_atr = latest['ATR']
         
-        # Premium SL and Target Calculation (1.5x and 2.5x of ATR applied to Premium)
-        # Using Spot ATR directly as premium point movements for simplicity and accuracy
         prem_sl_points = round(1.5 * current_atr, 2)
         prem_target_points = round(2.5 * current_atr, 2)
         
@@ -287,9 +290,8 @@ if st.session_state['access_token']:
         st.subheader("🎯 Live Signal Alert")
         
         atm_strike = int(round(close / 50) * 50) 
-        signal_time = latest['Timestamp'].strftime('%I:%M %p') if 'Timestamp' in df.columns else "Live"
+        signal_time = latest['Timestamp'].strftime('%I:%M %p')
         
-        # Calculate Current Scores
         ce_score, ce_checklist = get_ce_signal_and_checklist(latest)
         pe_score, pe_checklist = get_pe_signal_and_checklist(latest)
         
@@ -323,8 +325,7 @@ if st.session_state['access_token']:
                 t_col4.metric(f"🛑 Stop Loss (-{prem_sl_points})", f"₹{round(premium - prem_sl_points, 2)}")
                 t_col5.metric("⏰ Signal Time", signal_time)
                 
-                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n"
-                        f"⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
+                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 
                 st.write("")
                 if st.button(f"🚀 BUY {atm_strike} CE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
@@ -355,8 +356,7 @@ if st.session_state['access_token']:
                 t_col4.metric(f"🛑 Stop Loss (-{prem_sl_points})", f"₹{round(premium - prem_sl_points, 2)}")
                 t_col5.metric("⏰ Signal Time", signal_time)
                 
-                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n"
-                        f"⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
+                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 
                 st.write("")
                 if st.button(f"🚀 BUY {atm_strike} PE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
@@ -370,18 +370,41 @@ if st.session_state['access_token']:
         else:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
             st.markdown(f"**Current Trend is Weak or Sideways.** \n* **CE Score:** {ce_score}/10 \n* **PE Score:** {pe_score}/10")
-            st.markdown(f"* ATR (Volatility): {current_atr:.2f} | RSI: {latest['RSI']:.2f} | Spot: {close}")
-
-        # --- 📊 PRO INTERACTIVE CHART ---
+            
         st.markdown("---")
-        st.subheader("📊 Live NIFTY 50 Pro Chart")
+
+        # --- 🎨 NEW: MINI HUD DASHBOARD ---
+        st.subheader("🖥️ Live Market HUD")
+        hud_c1, hud_c2, hud_c3, hud_c4 = st.columns(4)
         
+        rsi_color = "🟢 Bullish" if latest['RSI'] > 55 else "🔴 Bearish" if latest['RSI'] < 45 else "🟡 Neutral"
+        atr_color = "🟢 Good Volatility" if current_atr > 4 else "🔴 Sideways"
+        trend_color = "🟢 BUY Zone" if latest['EMA_9'] > latest['EMA_21'] else "🔴 SELL Zone"
+        vwap_color = "🟢 Above VWAP" if close > latest['VWAP'] else "🔴 Below VWAP"
+
+        hud_c1.info(f"**RSI (14):** {latest['RSI']:.2f} \n\n {rsi_color}")
+        hud_c2.info(f"**ATR (14):** {current_atr:.2f} \n\n {atr_color}")
+        hud_c3.info(f"**Trend (EMA):** \n\n {trend_color}")
+        hud_c4.info(f"**VWAP Status:** \n\n {vwap_color}")
+
+        # --- 📊 PRO INTERACTIVE CHART (WITH NEW MARKERS & SL/TP LINES) ---
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.75, 0.25])
 
         fig.add_trace(go.Candlestick(x=df['Timestamp'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Candles'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['VWAP'], line=dict(color='#795548', width=2, dash='dash'), name='VWAP'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['EMA_9'], line=dict(color='#2196f3', width=1.5), name='EMA 9'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['EMA_21'], line=dict(color='#f44336', width=1.5), name='EMA 21'), row=1, col=1)
+
+        # 🎨 NEW: ADD BUY / SELL MARKERS ON CHART
+        if len(buy_x) > 0:
+            fig.add_trace(go.Scatter(x=buy_x, y=buy_y, mode='markers', marker=dict(symbol='triangle-up', size=16, color='#00e5a0', line=dict(width=1, color='black')), name='BUY Signal'), row=1, col=1)
+        if len(sell_x) > 0:
+            fig.add_trace(go.Scatter(x=sell_x, y=sell_y, mode='markers', marker=dict(symbol='triangle-down', size=16, color='#ff4d6d', line=dict(width=1, color='black')), name='SELL Signal'), row=1, col=1)
+            
+        # 🎨 NEW: VISUAL SL & TARGET LINES (For active trades)
+        if latest_active_sl and latest_active_tp:
+            fig.add_hline(y=latest_active_tp, line_dash="dash", line_color="#00e5a0", annotation_text="Target Line", row=1, col=1)
+            fig.add_hline(y=latest_active_sl, line_dash="dash", line_color="#ff4d6d", annotation_text="Stop Loss Line", row=1, col=1)
 
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MACD_Line'], line=dict(color='#2196f3', width=1.5), name='MACD'), row=2, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['Signal_Line'], line=dict(color='#ff9800', width=1.5), name='Signal'), row=2, col=1)
@@ -401,3 +424,5 @@ if st.session_state['access_token']:
         if auto_refresh:
             time.sleep(10)
             st.rerun()
+    else:
+        st.info("Market data is not available for today yet or it is a trading holiday.")
