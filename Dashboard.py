@@ -27,7 +27,7 @@ def play_alert_sound():
     """
     st.components.v1.html(audio_html, width=0, height=0, scrolling=False)
 
-def get_ce_signal_and_checklist(data, atr_min=4):
+def get_ce_signal_and_checklist(data, atr_min=7): # 🚀 UPDATED ATR MIN TO 7
     score = 0
     checklist = {}
     
@@ -57,7 +57,7 @@ def get_ce_signal_and_checklist(data, atr_min=4):
     
     return score, checklist
 
-def get_pe_signal_and_checklist(data, atr_min=4):
+def get_pe_signal_and_checklist(data, atr_min=7): # 🚀 UPDATED ATR MIN TO 7
     score = 0
     checklist = {}
     
@@ -183,16 +183,23 @@ if st.session_state['access_token']:
         cost_to_cost_today = 0
         active_trades = []
         
-        # Lists to hold Chart UI Markers
         buy_x, buy_y = [], []
         sell_x, sell_y = [], []
         latest_active_sl = None
         latest_active_tp = None
 
+        # 🚀 NEW: TIME FILTER LOGIC
+        no_trade_start = datetime.time(12, 0)
+        no_trade_end = datetime.time(13, 30)
+
         for i in range(1, len(df)):
             row = df.iloc[i]
             prev_row = df.iloc[i-1]
             
+            # Check Time
+            candle_time = row['Timestamp'].time()
+            is_valid_time = not (no_trade_start <= candle_time <= no_trade_end)
+
             for t in active_trades[:]:
                 if t['type'] == 'LONG':
                     if not t['tsl_activated'] and row['High'] >= t['entry'] + t['atr_val']:
@@ -224,15 +231,19 @@ if st.session_state['access_token']:
                         active_trades.remove(t)
                         latest_active_sl, latest_active_tp = None, None
 
-            ce_score, _ = get_ce_signal_and_checklist(row)
-            pe_score, _ = get_pe_signal_and_checklist(row)
+            ce_score, ce_chk = get_ce_signal_and_checklist(row)
+            pe_score, pe_chk = get_pe_signal_and_checklist(row)
             prev_ce_score, _ = get_ce_signal_and_checklist(prev_row)
             prev_pe_score, _ = get_pe_signal_and_checklist(prev_row)
             
             sl_points = round(1.5 * row['ATR'], 2)
             target_points = round(2.5 * row['ATR'], 2)
             
-            if ce_score >= 7 and prev_ce_score < 7:
+            # 🚀 NEW: VOLUME OR RSI MANDATORY CONDITION
+            ce_vol_or_rsi_ok = ce_chk["Volume Surge (> 1.5x Avg) [+1 pt]"] or ce_chk["RSI (> 60 Bullish) [+1 pt]"]
+            pe_vol_or_rsi_ok = pe_chk["Volume Surge (> 1.5x Avg) [+1 pt]"] or pe_chk["RSI (< 40 Bearish) [+1 pt]"]
+
+            if ce_score >= 7 and prev_ce_score < 7 and is_valid_time and ce_vol_or_rsi_ok:
                 total_signals_today += 1
                 active_trades.append({'type': 'LONG', 'entry': row['Close'], 'target': row['Close'] + target_points, 'sl': row['Close'] - sl_points, 'atr_val': row['ATR'], 'tsl_activated': False})
                 buy_x.append(row['Timestamp'])
@@ -240,7 +251,7 @@ if st.session_state['access_token']:
                 latest_active_sl = row['Close'] - sl_points
                 latest_active_tp = row['Close'] + target_points
                 
-            elif pe_score >= 7 and prev_pe_score < 7:
+            elif pe_score >= 7 and prev_pe_score < 7 and is_valid_time and pe_vol_or_rsi_ok:
                 total_signals_today += 1
                 active_trades.append({'type': 'SHORT', 'entry': row['Close'], 'target': row['Close'] - target_points, 'sl': row['Close'] + sl_points, 'atr_val': row['ATR'], 'tsl_activated': False})
                 sell_x.append(row['Timestamp'])
@@ -291,9 +302,14 @@ if st.session_state['access_token']:
         
         atm_strike = int(round(close / 50) * 50) 
         signal_time = latest['Timestamp'].strftime('%I:%M %p')
+        latest_time_obj = latest['Timestamp'].time()
+        is_live_valid_time = not (no_trade_start <= latest_time_obj <= no_trade_end)
         
         ce_score, ce_checklist = get_ce_signal_and_checklist(latest)
         pe_score, pe_checklist = get_pe_signal_and_checklist(latest)
+        
+        ce_vol_or_rsi_ok = ce_checklist["Volume Surge (> 1.5x Avg) [+1 pt]"] or ce_checklist["RSI (> 60 Bullish) [+1 pt]"]
+        pe_vol_or_rsi_ok = pe_checklist["Volume Surge (> 1.5x Avg) [+1 pt]"] or pe_checklist["RSI (< 40 Bearish) [+1 pt]"]
         
         def get_premium(opt_type):
             symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
@@ -305,7 +321,11 @@ if st.session_state['access_token']:
                 pass
             return 0.0
 
-        if ce_score >= 7:
+        if not is_live_valid_time:
+            st.warning("⏳ **NO TRADE ZONE (12:00 PM to 1:30 PM)**")
+            st.markdown("Market is mostly sideways during this time. Please wait for the afternoon breakout.")
+
+        elif ce_score >= 7 and ce_vol_or_rsi_ok:
             play_alert_sound()
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
@@ -336,7 +356,7 @@ if st.session_state['access_token']:
             else:
                 st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Incorrect**")
                 
-        elif pe_score >= 7:
+        elif pe_score >= 7 and pe_vol_or_rsi_ok:
             play_alert_sound()
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
@@ -369,7 +389,7 @@ if st.session_state['access_token']:
                 
         else:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
-            st.markdown(f"**Current Trend is Weak or Sideways.** \n* **CE Score:** {ce_score}/10 \n* **PE Score:** {pe_score}/10")
+            st.markdown(f"**Current Trend is Weak or missing RSI/Volume strength.** \n* **CE Score:** {ce_score}/10 \n* **PE Score:** {pe_score}/10")
             
         st.markdown("---")
 
@@ -378,7 +398,7 @@ if st.session_state['access_token']:
         hud_c1, hud_c2, hud_c3, hud_c4 = st.columns(4)
         
         rsi_color = "🟢 Bullish" if latest['RSI'] > 55 else "🔴 Bearish" if latest['RSI'] < 45 else "🟡 Neutral"
-        atr_color = "🟢 Good Volatility" if current_atr > 4 else "🔴 Sideways"
+        atr_color = "🟢 Good Volatility" if current_atr > 7 else "🔴 Sideways (<7)"
         trend_color = "🟢 BUY Zone" if latest['EMA_9'] > latest['EMA_21'] else "🔴 SELL Zone"
         vwap_color = "🟢 Above VWAP" if close > latest['VWAP'] else "🔴 Below VWAP"
 
@@ -395,13 +415,13 @@ if st.session_state['access_token']:
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['EMA_9'], line=dict(color='#2196f3', width=1.5), name='EMA 9'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['EMA_21'], line=dict(color='#f44336', width=1.5), name='EMA 21'), row=1, col=1)
 
-        # 🎨 NEW: ADD BUY / SELL MARKERS ON CHART
+        # 🎨 ADD BUY / SELL MARKERS ON CHART
         if len(buy_x) > 0:
             fig.add_trace(go.Scatter(x=buy_x, y=buy_y, mode='markers', marker=dict(symbol='triangle-up', size=16, color='#00e5a0', line=dict(width=1, color='black')), name='BUY Signal'), row=1, col=1)
         if len(sell_x) > 0:
             fig.add_trace(go.Scatter(x=sell_x, y=sell_y, mode='markers', marker=dict(symbol='triangle-down', size=16, color='#ff4d6d', line=dict(width=1, color='black')), name='SELL Signal'), row=1, col=1)
             
-        # 🎨 NEW: VISUAL SL & TARGET LINES (For active trades)
+        # 🎨 VISUAL SL & TARGET LINES (For active trades)
         if latest_active_sl and latest_active_tp:
             fig.add_hline(y=latest_active_tp, line_dash="dash", line_color="#00e5a0", annotation_text="Target Line", row=1, col=1)
             fig.add_hline(y=latest_active_sl, line_dash="dash", line_color="#ff4d6d", annotation_text="Stop Loss Line", row=1, col=1)
