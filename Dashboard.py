@@ -1,24 +1,194 @@
 import datetime
 import time
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
-import pandas as pd
 from fyers_apiv3 import fyersModel
 
-from nifty_strategy import add_indicators, evaluate_signal, run_intraday_backtest, NO_TRADE_START, NO_TRADE_END
-
+# ==========================================
+# ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
+# ==========================================
 CLIENT_ID = "BT8FRQLN19-200"
 SECRET_KEY = "0ivLeQN8vdI2VyKA"
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/"
+# ==========================================
 
 st.set_page_config(page_title="Sniper Trade App - NIFTY 50", page_icon="🎯", layout="wide")
 
+# --- STRATEGY CONSTANTS ---
+MARKET_OPEN = datetime.time(9, 15)
+ORB_END = datetime.time(9, 30)
+NO_TRADE_START = datetime.time(12, 0)
+NO_TRADE_END = datetime.time(13, 30)
+LAST_ENTRY_TIME = datetime.time(14, 45)
+MAX_TRADES_PER_DAY = 3
+RISK_ATR_MULTIPLIER = 1.25
+REWARD_R_MULTIPLIER = 2.25
+TRAIL_TRIGGER_R = 1.0
+TRAIL_ATR_MULTIPLIER = 1.0
 
+@dataclass(frozen=True)
+class SignalDecision:
+    signal: Optional[str]
+    score: int
+    checklist: Dict[str, bool]
+    reason: str
+    sl_points: float
+    target_points: float
+
+# --- STRATEGY FUNCTIONS ---
+def _rma(series: pd.Series, period: int) -> pd.Series:
+    return series.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+
+def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy().sort_values("Timestamp").reset_index(drop=True)
+    out["Typical_Price"] = (out["High"] + out["Low"] + out["Close"]) / 3
+    out["VWAP"] = (out["Typical_Price"] * out["Volume"]).cumsum() / out["Volume"].replace(0, np.nan).cumsum()
+    out["VWAP"] = out["VWAP"].fillna(out["Close"])
+
+    out["EMA_9"] = out["Close"].ewm(span=9, adjust=False).mean()
+    out["EMA_21"] = out["Close"].ewm(span=21, adjust=False).mean()
+    out["EMA_50"] = out["Close"].ewm(span=50, adjust=False).mean()
+    out["EMA_50_Slope"] = out["EMA_50"].diff(3)
+
+    out["EMA_12"] = out["Close"].ewm(span=12, adjust=False).mean()
+    out["EMA_26"] = out["Close"].ewm(span=26, adjust=False).mean()
+    out["MACD_Line"] = out["EMA_12"] - out["EMA_26"]
+    out["Signal_Line"] = out["MACD_Line"].ewm(span=9, adjust=False).mean()
+    out["MACD_Hist"] = out["MACD_Line"] - out["Signal_Line"]
+
+    delta = out["Close"].diff()
+    gain = delta.clip(lower=0)
+    loss = (-delta).clip(lower=0)
+    rs = _rma(gain, 14) / _rma(loss, 14).replace(0, np.nan)
+    out["RSI"] = (100 - (100 / (1 + rs))).fillna(50)
+    out["RSI_Slope"] = out["RSI"].diff(3)
+
+    prev_close = out["Close"].shift(1)
+    tr = pd.concat([(out["High"] - out["Low"]), (out["High"] - prev_close).abs(), (out["Low"] - prev_close).abs()], axis=1).max(axis=1)
+    out["TR"] = tr
+    out["ATR"] = _rma(tr, 14).bfill()
+    out["ATR_Pct"] = out["ATR"] / out["Close"] * 100
+
+    up_move = out["High"].diff()
+    down_move = -out["Low"].diff()
+    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=out.index)
+    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=out.index)
+    atr = _rma(tr, 14).replace(0, np.nan)
+    out["Plus_DI"] = 100 * _rma(plus_dm, 14) / atr
+    out["Minus_DI"] = 100 * _rma(minus_dm, 14) / atr
+    dx = ((out["Plus_DI"] - out["Minus_DI"]).abs() / (out["Plus_DI"] + out["Minus_DI"]).replace(0, np.nan)) * 100
+    out["ADX"] = _rma(dx, 14).fillna(0)
+
+    out["Volume_SMA_20"] = out["Volume"].rolling(20, min_periods=5).mean()
+    out["Volume_Ratio"] = out["Volume"] / out["Volume_SMA_20"].replace(0, np.nan)
+
+    session = out.set_index("Timestamp")
+    htf = session.resample("15min", label="right", closed="right").agg({"Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"}).dropna()
+    htf["HTF_EMA_9"] = htf["Close"].ewm(span=9, adjust=False).mean()
+    htf["HTF_EMA_21"] = htf["Close"].ewm(span=21, adjust=False).mean()
+    htf["HTF_EMA_21_Slope"] = htf["HTF_EMA_21"].diff(2)
+    htf = htf.shift(1) 
+    out = pd.merge_asof(out, htf[["HTF_EMA_9", "HTF_EMA_21", "HTF_EMA_21_Slope"]].reset_index(), on="Timestamp", direction="backward")
+
+    orb = out[out["Timestamp"].dt.time <= ORB_END]
+    out["ORB_High"] = orb["High"].max() if not orb.empty else np.nan
+    out["ORB_Low"] = orb["Low"].min() if not orb.empty else np.nan
+    out["VWAP_Distance_ATR"] = (out["Close"] - out["VWAP"]).abs() / out["ATR"].replace(0, np.nan)
+    return out.round(2)
+
+def _fresh_cross(row: pd.Series, prev: pd.Series, side: str) -> bool:
+    if side == "CE":
+        return row["MACD_Line"] > row["Signal_Line"] and prev["MACD_Line"] <= prev["Signal_Line"] and row["MACD_Line"] > 0
+    return row["MACD_Line"] < row["Signal_Line"] and prev["MACD_Line"] >= prev["Signal_Line"] and row["MACD_Line"] < 0
+
+def _vwap_breakout_retest(df: pd.DataFrame, i: int, side: str) -> bool:
+    start = max(0, i - 6)
+    window = df.iloc[start:i + 1]
+    row = df.iloc[i]
+    tol = max(row["ATR"] * 0.18, 3)
+    if side == "CE":
+        breakout_seen = ((window["Close"] > window["VWAP"] + tol) & (window["Close"].shift(1) <= window["VWAP"].shift(1) + tol)).any()
+        retest_hold = row["Low"] <= row["VWAP"] + tol and row["Close"] > row["VWAP"] + tol
+    else:
+        breakout_seen = ((window["Close"] < window["VWAP"] - tol) & (window["Close"].shift(1) >= window["VWAP"].shift(1) - tol)).any()
+        retest_hold = row["High"] >= row["VWAP"] - tol and row["Close"] < row["VWAP"] - tol
+    return bool(breakout_seen or retest_hold)
+
+def evaluate_signal(df: pd.DataFrame, i: int, last_signal_side: Optional[str] = None) -> SignalDecision:
+    row, prev = df.iloc[i], df.iloc[i - 1]
+    candle_time = row["Timestamp"].time()
+    tradable_time = MARKET_OPEN < candle_time <= LAST_ENTRY_TIME and not (NO_TRADE_START <= candle_time <= NO_TRADE_END)
+    sl_points = round(RISK_ATR_MULTIPLIER * row["ATR"], 2)
+    target_points = round(sl_points * REWARD_R_MULTIPLIER, 2)
+
+    def side_check(side: str) -> Tuple[int, Dict[str, bool]]:
+        bull = side == "CE"
+        checks = {
+            "Tradable time; avoids lunch chop and late entries": tradable_time,
+            "Strong 5m trend: EMA 9/21/50 stacked with EMA50 slope": (row["EMA_9"] > row["EMA_21"] > row["EMA_50"] and row["EMA_50_Slope"] > 0) if bull else (row["EMA_9"] < row["EMA_21"] < row["EMA_50"] and row["EMA_50_Slope"] < 0),
+            "Completed 15m trend confirms direction": (row["HTF_EMA_9"] > row["HTF_EMA_21"] and row["HTF_EMA_21_Slope"] > 0) if bull else (row["HTF_EMA_9"] < row["HTF_EMA_21"] and row["HTF_EMA_21_Slope"] < 0),
+            "ADX trend-strength filter: ADX >= 22 and DI agrees": (row["ADX"] >= 22 and row["Plus_DI"] > row["Minus_DI"]) if bull else (row["ADX"] >= 22 and row["Minus_DI"] > row["Plus_DI"]),
+            "VWAP breakout/retest confirmation; not simple above/below": _vwap_breakout_retest(df, i, side),
+            "Fresh MACD crossover with zero-line confirmation": _fresh_cross(row, prev, side),
+            "RSI momentum with slope, avoiding exhausted extremes": (55 <= row["RSI"] <= 72 and row["RSI_Slope"] > 0) if bull else (28 <= row["RSI"] <= 45 and row["RSI_Slope"] < 0),
+            "Volume expansion confirms institutional participation": row["Volume_Ratio"] >= 1.25,
+            "ORB participation confirms range expansion": row["Close"] > row["ORB_High"] if bull else row["Close"] < row["ORB_Low"],
+            "Volatility regime is tradable, not compressed/sideways": row["ATR_Pct"] >= 0.045 and row["VWAP_Distance_ATR"] <= 1.6,
+            "Duplicate signal guard": last_signal_side != side,
+        }
+        mandatory = list(checks.values())
+        score = int(sum(mandatory))
+        return score, checks
+
+    ce_score, ce_checks = side_check("CE")
+    pe_score, pe_checks = side_check("PE")
+    if ce_score == len(ce_checks) and ce_score >= pe_score:
+        return SignalDecision("CE", ce_score, ce_checks, "Premium-quality BUY CE setup confirmed.", sl_points, target_points)
+    if pe_score == len(pe_checks):
+        return SignalDecision("PE", pe_score, pe_checks, "Premium-quality BUY PE setup confirmed.", sl_points, target_points)
+    best_signal, best_score, best_checks = ("CE", ce_score, ce_checks) if ce_score >= pe_score else ("PE", pe_score, pe_checks)
+    return SignalDecision(None, best_score, best_checks, f"Waiting: best candidate is {best_signal}, but all institutional filters are not aligned.", sl_points, target_points)
+
+def run_intraday_backtest(df: pd.DataFrame) -> Tuple[Dict[str, int], List[dict], Optional[dict]]:
+    stats = {"signals": 0, "targets": 0, "stops": 0, "breakeven": 0}
+    trades: List[dict] = []
+    active: Optional[dict] = None
+    last_side: Optional[str] = None
+    for i in range(50, len(df)):
+        row = df.iloc[i]
+        if active:
+            long = active["side"] == "CE"
+            reached_1r = row["High"] >= active["entry"] + active["risk"] if long else row["Low"] <= active["entry"] - active["risk"]
+            if reached_1r:
+                active["sl"] = active["entry"]
+                active["trail"] = True
+            if active.get("trail"):
+                active["sl"] = max(active["sl"], row["Close"] - TRAIL_ATR_MULTIPLIER * row["ATR"]) if long else min(active["sl"], row["Close"] + TRAIL_ATR_MULTIPLIER * row["ATR"])
+            hit_target = row["High"] >= active["target"] if long else row["Low"] <= active["target"]
+            hit_sl = row["Low"] <= active["sl"] if long else row["High"] >= active["sl"]
+            if hit_target or hit_sl:
+                stats["targets" if hit_target else "breakeven" if active.get("trail") else "stops"] += 1
+                active = None
+        if active or stats["signals"] >= MAX_TRADES_PER_DAY:
+            continue
+        decision = evaluate_signal(df, i, last_side)
+        if decision.signal:
+            direction = 1 if decision.signal == "CE" else -1
+            active = {"side": decision.signal, "entry": row["Close"], "risk": decision.sl_points, "sl": row["Close"] - direction * decision.sl_points, "target": row["Close"] + direction * decision.target_points, "trail": False, "time": row["Timestamp"]}
+            trades.append(active.copy())
+            stats["signals"] += 1
+            last_side = decision.signal
+    return stats, trades, active
+
+# --- UI & APP FUNCTIONS ---
 def play_alert_sound():
     st.components.v1.html('<audio autoplay="true"><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg"></audio>', width=0, height=0, scrolling=False)
-
 
 def get_premium(fyers, expiry_str, atm_strike, opt_type):
     symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
@@ -29,7 +199,6 @@ def get_premium(fyers, expiry_str, atm_strike, opt_type):
     except Exception as exc:
         st.caption(f"Premium quote unavailable: {exc}")
     return 0.0
-
 
 st.title("🎯 Sniper Trade App (NIFTY 50 Live & Algo Execution)")
 st.markdown("---")
@@ -127,7 +296,7 @@ if st.session_state["access_token"]:
                 st.markdown(f"{'✅' if ok else '❌'} **{label}**")
             
             if premium > 0:
-                # 🚀 NEW: PERCENTAGE-BASED TARGET AND STOP LOSS FOR PREMIUM
+                # 🚀 PERCENTAGE-BASED TARGET AND STOP LOSS FOR PREMIUM
                 target_pct = 0.20  # 20% Target
                 sl_pct = 0.10      # 10% Stop Loss
                 
