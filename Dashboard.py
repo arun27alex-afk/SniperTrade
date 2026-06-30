@@ -13,8 +13,8 @@ from fyers_apiv3 import fyersModel
 # ==========================================
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
-CLIENT_ID = "BT8FRQLN19-200"
-SECRET_KEY = "0ivLeQN8vdI2VyKA"
+CLIENT_ID = "***"
+SECRET_KEY = "***"
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/"
 # ==========================================
 
@@ -26,20 +26,19 @@ ORB_END = datetime.time(9, 30)
 NO_TRADE_START = datetime.time(12, 0)
 NO_TRADE_END = datetime.time(13, 30)
 LAST_ENTRY_TIME = datetime.time(14, 45)
-MAX_TRADES_PER_DAY = 3
-RISK_ATR_MULTIPLIER = 1.25
-REWARD_R_MULTIPLIER = 2.25
+MAX_TRADES_PER_DAY = 5
+RISK_ATR_MULTIPLIER = 1.0
+REWARD_R_MULTIPLIER = 2.0
 TRAIL_TRIGGER_R = 1.0
 TRAIL_ATR_MULTIPLIER = 1.0
-MACD_CONFIRMATION_LOOKBACK = 3
 DIAGNOSTIC_FILTERS = [
-    "Higher Timeframe Trend",
+    "EMA 20/50 Trend",
+    "VWAP Direction",
     "ADX Filter",
-    "ORB Filter",
-    "VWAP Breakout/Retest",
-    "MACD Confirmation",
     "RSI Momentum",
+    "MACD Confirmation",
     "Volume Filter",
+    "Time Window",
 ]
 
 @dataclass(frozen=True)
@@ -63,10 +62,10 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     session_volume = out["Volume"].replace(0, np.nan).groupby(out["Session_Date"]).cumsum()
     out["VWAP"] = (session_pv / session_volume).fillna(out["Close"])
 
-    out["EMA_9"] = out["Close"].ewm(span=9, adjust=False).mean()
-    out["EMA_21"] = out["Close"].ewm(span=21, adjust=False).mean()
+    out["EMA_20"] = out["Close"].ewm(span=20, adjust=False).mean()
     out["EMA_50"] = out["Close"].ewm(span=50, adjust=False).mean()
-    out["EMA_50_Slope"] = out["EMA_50"].diff(3)
+    out["EMA_9"] = out["EMA_20"]
+    out["EMA_21"] = out["EMA_50"]
 
     out["EMA_12"] = out["Close"].ewm(span=12, adjust=False).mean()
     out["EMA_26"] = out["Close"].ewm(span=26, adjust=False).mean()
@@ -116,18 +115,10 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     out["VWAP_Distance_ATR"] = (out["Close"] - out["VWAP"]).abs() / out["ATR"].replace(0, np.nan)
     return out.round(2)
 
-
-def _fresh_cross(df: pd.DataFrame, i: int, side: str, lookback: int = MACD_CONFIRMATION_LOOKBACK) -> bool:
-    start = max(1, i - lookback + 1)
-    window = df.iloc[start:i + 1]
-    prev_window = df.iloc[start - 1:i]
-    row = df.iloc[i]
+def _macd_confirms(row: pd.Series, side: str) -> bool:
     if side == "CE":
-        recent_cross = ((window["MACD_Line"].to_numpy() > window["Signal_Line"].to_numpy()) & (prev_window["MACD_Line"].to_numpy() <= prev_window["Signal_Line"].to_numpy())).any()
-        return bool(recent_cross and row["MACD_Line"] > row["Signal_Line"] and row["MACD_Line"] > 0)
-    recent_cross = ((window["MACD_Line"].to_numpy() < window["Signal_Line"].to_numpy()) & (prev_window["MACD_Line"].to_numpy() >= prev_window["Signal_Line"].to_numpy())).any()
-    return bool(recent_cross and row["MACD_Line"] < row["Signal_Line"] and row["MACD_Line"] < 0)
-
+        return bool(row["MACD_Line"] > row["Signal_Line"])
+    return bool(row["MACD_Line"] < row["Signal_Line"])
 
 def _vwap_breakout_retest(df: pd.DataFrame, i: int, side: str) -> bool:
     start = max(0, i - 6)
@@ -142,26 +133,21 @@ def _vwap_breakout_retest(df: pd.DataFrame, i: int, side: str) -> bool:
         retest_hold = row["High"] >= row["VWAP"] - tol and row["Close"] < row["VWAP"] - tol
     return bool(breakout_seen or retest_hold)
 
+def _is_trade_time(candle_time: datetime.time) -> bool:
+    return datetime.time(9, 30) <= candle_time <= datetime.time(11, 45) or datetime.time(13, 45) <= candle_time <= datetime.time(14, 45)
 
 def _filter_states(df: pd.DataFrame, i: int, side: str, last_signal_side: Optional[str] = None) -> Dict[str, bool]:
     row = df.iloc[i]
-    candle_time = row["Timestamp"].time()
-    tradable_time = MARKET_OPEN < candle_time <= LAST_ENTRY_TIME and not (NO_TRADE_START <= candle_time <= NO_TRADE_END)
     bull = side == "CE"
     return {
-        "Tradable Time": tradable_time,
-        "5m Trend": (row["EMA_9"] > row["EMA_21"] > row["EMA_50"] and row["EMA_50_Slope"] > 0) if bull else (row["EMA_9"] < row["EMA_21"] < row["EMA_50"] and row["EMA_50_Slope"] < 0),
-        "Higher Timeframe Trend": (row["HTF_EMA_9"] > row["HTF_EMA_21"] and row["HTF_EMA_21_Slope"] > 0) if bull else (row["HTF_EMA_9"] < row["HTF_EMA_21"] and row["HTF_EMA_21_Slope"] < 0),
-        "ADX Filter": (row["ADX"] >= 22 and row["Plus_DI"] > row["Minus_DI"]) if bull else (row["ADX"] >= 22 and row["Minus_DI"] > row["Plus_DI"]),
-        "VWAP Breakout/Retest": _vwap_breakout_retest(df, i, side),
-        "MACD Confirmation": _fresh_cross(df, i, side),
-        "RSI Momentum": (55 <= row["RSI"] <= 72 and row["RSI_Slope"] > 0) if bull else (28 <= row["RSI"] <= 45 and row["RSI_Slope"] < 0),
-        "Volume Filter": row["Volume_Ratio"] >= 1.25,
-        "ORB Filter": row["Close"] > row["ORB_High"] if bull else row["Close"] < row["ORB_Low"],
-        "Volatility Regime": row["ATR_Pct"] >= 0.045 and row["VWAP_Distance_ATR"] <= 1.6,
-        "Duplicate Guard": last_signal_side != side,
+        "Time Window": _is_trade_time(row["Timestamp"].time()),
+        "EMA 20/50 Trend": (row["EMA_20"] > row["EMA_50"]) if bull else (row["EMA_20"] < row["EMA_50"]),
+        "VWAP Direction": row["Close"] > row["VWAP"] if bull else row["Close"] < row["VWAP"],
+        "ADX Filter": (row["ADX"] > 20 and row["Plus_DI"] > row["Minus_DI"]) if bull else (row["ADX"] > 20 and row["Minus_DI"] > row["Plus_DI"]),
+        "RSI Momentum": row["RSI"] > 55 if bull else row["RSI"] < 45,
+        "MACD Confirmation": _macd_confirms(row, side),
+        "Volume Filter": row["Volume"] > row["Volume_SMA_20"],
     }
-
 
 def evaluate_signal(df: pd.DataFrame, i: int, last_signal_side: Optional[str] = None) -> SignalDecision:
     row = df.iloc[i]
@@ -171,17 +157,13 @@ def evaluate_signal(df: pd.DataFrame, i: int, last_signal_side: Optional[str] = 
     def side_check(side: str) -> Tuple[int, Dict[str, bool]]:
         states = _filter_states(df, i, side, last_signal_side)
         checks = {
-            "Tradable time; avoids lunch chop and late entries": states["Tradable Time"],
-            "Strong 5m trend: EMA 9/21/50 stacked with EMA50 slope": states["5m Trend"],
-            "Completed 15m trend confirms direction": states["Higher Timeframe Trend"],
-            "ADX trend-strength filter: ADX >= 22 and DI agrees": states["ADX Filter"],
-            "VWAP breakout/retest confirmation; not simple above/below": states["VWAP Breakout/Retest"],
-            "Recent MACD crossover with zero-line confirmation": states["MACD Confirmation"],
-            "RSI momentum with slope, avoiding exhausted extremes": states["RSI Momentum"],
-            "Volume expansion confirms institutional participation": states["Volume Filter"],
-            "ORB participation confirms range expansion": states["ORB Filter"],
-            "Volatility regime is tradable, not compressed/sideways": states["Volatility Regime"],
-            "Duplicate signal guard": states["Duplicate Guard"],
+            "Time filter: 9:30-11:45 or 13:45-14:45": states["Time Window"],
+            "EMA 20/50 trend confirmation": states["EMA 20/50 Trend"],
+            "Price direction vs VWAP": states["VWAP Direction"],
+            "ADX > 20 with DI confirmation": states["ADX Filter"],
+            "RSI momentum threshold": states["RSI Momentum"],
+            "MACD line vs signal line": states["MACD Confirmation"],
+            "Volume greater than 20-period average": states["Volume Filter"],
         }
         score = int(sum(checks.values()))
         return score, checks
@@ -195,13 +177,12 @@ def evaluate_signal(df: pd.DataFrame, i: int, last_signal_side: Optional[str] = 
     best_signal, best_score, best_checks = ("CE", ce_score, ce_checks) if ce_score >= pe_score else ("PE", pe_score, pe_checks)
     return SignalDecision(None, best_score, best_checks, f"Waiting: best candidate is {best_signal}, but all institutional filters are not aligned.", sl_points, target_points)
 
-
 def build_diagnostic_report(df: pd.DataFrame, start_index: int = 50) -> Tuple[pd.DataFrame, pd.DataFrame]:
     rows = []
     combo_rows = []
     sides = ("CE", "PE")
     filter_order = DIAGNOSTIC_FILTERS
-    base_filters = ["Tradable Time", "5m Trend", "Volatility Regime"]
+    base_filters = []
     sample_count = max(0, len(df) - start_index) * len(sides)
 
     states_by_side = {side: [] for side in sides}
@@ -247,13 +228,21 @@ def build_diagnostic_report(df: pd.DataFrame, start_index: int = 50) -> Tuple[pd
 
     return pd.DataFrame(rows), pd.DataFrame(combo_rows)
 
-def run_intraday_backtest(df: pd.DataFrame) -> Tuple[Dict[str, int], List[dict], Optional[dict]]:
-    stats = {"signals": 0, "targets": 0, "stops": 0, "breakeven": 0}
+def run_intraday_backtest(df: pd.DataFrame) -> Tuple[Dict[str, float], List[dict], Optional[dict]]:
+    stats: Dict[str, float] = {"signals": 0, "targets": 0, "stops": 0, "breakeven": 0, "avg_trades_per_day": 0.0, "profit_factor": 0.0, "win_rate": 0.0}
     trades: List[dict] = []
     active: Optional[dict] = None
-    last_side: Optional[str] = None
+    trades_by_day: Dict[datetime.date, int] = {}
+    gross_profit = 0.0
+    gross_loss = 0.0
+
     for i in range(50, len(df)):
         row = df.iloc[i]
+        session_date = row["Session_Date"] if "Session_Date" in row else row["Timestamp"].date()
+        previous_date = df.iloc[i - 1]["Session_Date"] if "Session_Date" in df.columns else df.iloc[i - 1]["Timestamp"].date()
+        if active and session_date != previous_date:
+            active = None
+
         if active:
             long = active["side"] == "CE"
             reached_1r = row["High"] >= active["entry"] + active["risk"] if long else row["Low"] <= active["entry"] - active["risk"]
@@ -265,17 +254,31 @@ def run_intraday_backtest(df: pd.DataFrame) -> Tuple[Dict[str, int], List[dict],
             hit_target = row["High"] >= active["target"] if long else row["Low"] <= active["target"]
             hit_sl = row["Low"] <= active["sl"] if long else row["High"] >= active["sl"]
             if hit_target or hit_sl:
-                stats["targets" if hit_target else "breakeven" if active.get("trail") else "stops"] += 1
+                if hit_target:
+                    stats["targets"] += 1
+                    gross_profit += REWARD_R_MULTIPLIER
+                elif active.get("trail"):
+                    stats["breakeven"] += 1
+                else:
+                    stats["stops"] += 1
+                    gross_loss += 1
                 active = None
-        if active or stats["signals"] >= MAX_TRADES_PER_DAY:
+
+        if active or trades_by_day.get(session_date, 0) >= MAX_TRADES_PER_DAY:
             continue
-        decision = evaluate_signal(df, i, last_side)
+        decision = evaluate_signal(df, i)
         if decision.signal:
             direction = 1 if decision.signal == "CE" else -1
             active = {"side": decision.signal, "entry": row["Close"], "risk": decision.sl_points, "sl": row["Close"] - direction * decision.sl_points, "target": row["Close"] + direction * decision.target_points, "trail": False, "time": row["Timestamp"]}
             trades.append(active.copy())
             stats["signals"] += 1
-            last_side = decision.signal
+            trades_by_day[session_date] = trades_by_day.get(session_date, 0) + 1
+
+    trading_days = df["Session_Date"].nunique() if "Session_Date" in df.columns else max(1, df["Timestamp"].dt.date.nunique())
+    closed = stats["targets"] + stats["stops"] + stats["breakeven"]
+    stats["avg_trades_per_day"] = round(stats["signals"] / trading_days, 2) if trading_days else 0.0
+    stats["profit_factor"] = round(gross_profit / gross_loss, 2) if gross_loss else float("inf") if gross_profit else 0.0
+    stats["win_rate"] = round(stats["targets"] / closed * 100, 2) if closed else 0.0
     return stats, trades, active
 
 # --- UI & APP FUNCTIONS ---
@@ -291,6 +294,7 @@ def get_premium(fyers, expiry_str, atm_strike, opt_type):
     except Exception as exc:
         st.caption(f"Premium quote unavailable: {exc}")
     return 0.0
+
 
 st.title("🎯 Sniper Trade App (NIFTY 50 Live & Algo Execution)")
 st.markdown("---")
@@ -352,8 +356,7 @@ if st.session_state["access_token"]:
         col2.metric("🎯 Targets Hit", stats["targets"])
         col3.metric("🛡️ Cost-to-Cost", stats["breakeven"])
         col4.metric("🛑 Stop Loss Hit", stats["stops"])
-        closed = stats["targets"] + stats["stops"] + stats["breakeven"]
-        col5.metric("🏆 Win Rate (%)", f"{(stats['targets'] / closed * 100) if closed else 0:.1f}%")
+        col5.metric("🏆 Win Rate (%)", f"{stats['win_rate']}%")
         st.markdown("---")
 
         with st.expander("🔎 Strategy Diagnostic Report — filter pass/fail counts", expanded=stats["signals"] == 0):
@@ -389,9 +392,8 @@ if st.session_state["access_token"]:
         st.subheader("🎯 Live Signal Alert")
         atm_strike = int(round(close / 50) * 50)
         signal_time = latest["Timestamp"].strftime("%I:%M %p")
-        if NO_TRADE_START <= latest["Timestamp"].time() <= NO_TRADE_END:
-            st.warning("⏳ **NO TRADE ZONE (12:00 PM to 1:30 PM)**")
-        elif decision.signal:
+        
+        if decision.signal:
             play_alert_sound()
             premium = get_premium(fyers, expiry_str, atm_strike, decision.signal)
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{decision.signal}"
@@ -433,15 +435,15 @@ if st.session_state["access_token"]:
         st.subheader("🖥️ Live Market HUD")
         h1, h2, h3, h4 = st.columns(4)
         h1.info(f"**RSI (14):** {latest['RSI']:.2f}\n\n{'🟢 Momentum' if latest['RSI'] > 55 else '🔴 Momentum' if latest['RSI'] < 45 else '🟡 Neutral'}")
-        h2.info(f"**ADX (14):** {latest['ADX']:.2f}\n\n{'🟢 Trending' if latest['ADX'] >= 22 else '🔴 Sideways'}")
-        h3.info(f"**15m Trend:**\n\n{'🟢 Bullish' if latest['HTF_EMA_9'] > latest['HTF_EMA_21'] else '🔴 Bearish'}")
+        h2.info(f"**ADX (14):** {latest['ADX']:.2f}\n\n{'🟢 Trending' if latest['ADX'] >= 20 else '🔴 Sideways'}")
+        h3.info(f"**EMA Trend:**\n\n{'🟢 Bullish' if latest['EMA_20'] > latest['EMA_50'] else '🔴 Bearish'}")
         h4.info(f"**VWAP Setup:**\n\nDistance {latest['VWAP_Distance_ATR']:.2f} ATR")
 
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.75, 0.25])
         fig.add_trace(go.Candlestick(x=df["Timestamp"], open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"], name="Candles"), row=1, col=1)
         fig.add_trace(go.Scatter(x=df["Timestamp"], y=df["VWAP"], line=dict(color="#795548", width=2, dash="dash"), name="VWAP"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df["Timestamp"], y=df["EMA_9"], line=dict(color="#2196f3", width=1.5), name="EMA 9"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df["Timestamp"], y=df["EMA_21"], line=dict(color="#f44336", width=1.5), name="EMA 21"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df["Timestamp"], y=df["EMA_9"], line=dict(color="#2196f3", width=1.5), name="EMA 20"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df["Timestamp"], y=df["EMA_21"], line=dict(color="#f44336", width=1.5), name="EMA 50"), row=1, col=1)
         fig.add_trace(go.Scatter(x=buy_x, y=buy_y, mode="markers", marker=dict(symbol="triangle-up", size=16, color="#00e5a0"), name="BUY CE"), row=1, col=1)
         fig.add_trace(go.Scatter(x=sell_x, y=sell_y, mode="markers", marker=dict(symbol="triangle-down", size=16, color="#ff4d6d"), name="BUY PE"), row=1, col=1)
         if active_trade:
