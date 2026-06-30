@@ -13,8 +13,8 @@ from fyers_apiv3 import fyersModel
 # ==========================================
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
-CLIENT_ID = "***"
-SECRET_KEY = "***"
+CLIENT_ID = "BT8FRQLN19-200"
+SECRET_KEY = "0ivLeQN8vdI2VyKA"
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/"
 # ==========================================
 
