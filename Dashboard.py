@@ -11,7 +11,7 @@ import time
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
 CLIENT_ID = "BT8FRQLN19-200"       
-SECRET_KEY = "0ivLeQN8vdI2VyKA"         
+SECRET_KEY = "0ivLeQN8vdI2VyKA"  # ⚠️ Hidden for security, please insert your actual Key here      
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/" 
 # ==========================================
 
@@ -27,7 +27,7 @@ def play_alert_sound():
     """
     st.components.v1.html(audio_html, width=0, height=0, scrolling=False)
 
-def get_ce_signal_and_checklist(data, atr_min=5): # 🚀 OPTIMIZED ATR MIN TO 5
+def get_ce_signal_and_checklist(data, atr_min=5):
     score = 0
     checklist = {}
     
@@ -47,17 +47,17 @@ def get_ce_signal_and_checklist(data, atr_min=5): # 🚀 OPTIMIZED ATR MIN TO 5
         score += 2; checklist["MACD (MACD > Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD > Signal) [+2 pts]"] = False
         
-    if data['RSI'] > 55: # 🚀 OPTIMIZED RSI 55
+    if data['RSI'] > 55:
         score += 1; checklist["RSI (> 55 Bullish) [+1 pt]"] = True
     else: checklist["RSI (> 55 Bullish) [+1 pt]"] = False
         
-    if data['Volume'] > (data['Volume_SMA_20'] * 1.2): # 🚀 OPTIMIZED VOLUME 1.2x
+    if data['Volume'] > (data['Volume_SMA_20'] * 1.2):
         score += 1; checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
     else: checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = False
     
     return score, checklist
 
-def get_pe_signal_and_checklist(data, atr_min=5): # 🚀 OPTIMIZED ATR MIN TO 5
+def get_pe_signal_and_checklist(data, atr_min=5):
     score = 0
     checklist = {}
     
@@ -77,11 +77,11 @@ def get_pe_signal_and_checklist(data, atr_min=5): # 🚀 OPTIMIZED ATR MIN TO 5
         score += 2; checklist["MACD (MACD < Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD < Signal) [+2 pts]"] = False
         
-    if data['RSI'] < 45: # 🚀 OPTIMIZED RSI 45
+    if data['RSI'] < 45: 
         score += 1; checklist["RSI (< 45 Bearish) [+1 pt]"] = True
     else: checklist["RSI (< 45 Bearish) [+1 pt]"] = False
         
-    if data['Volume'] > (data['Volume_SMA_20'] * 1.2): # 🚀 OPTIMIZED VOLUME 1.2x
+    if data['Volume'] > (data['Volume_SMA_20'] * 1.2):
         score += 1; checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
     else: checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = False
     
@@ -180,7 +180,7 @@ if st.session_state['access_token']:
         total_signals_today = 0
         targets_hit_today = 0
         sl_hit_today = 0
-        cost_to_cost_today = 0
+        smart_exits_today = 0
         active_trades = []
         
         buy_x, buy_y = [], []
@@ -188,7 +188,6 @@ if st.session_state['access_token']:
         latest_active_sl = None
         latest_active_tp = None
 
-        # 🚀 NEW: TIME FILTER LOGIC
         no_trade_start = datetime.time(12, 0)
         no_trade_end = datetime.time(13, 30)
 
@@ -196,55 +195,45 @@ if st.session_state['access_token']:
             row = df.iloc[i]
             prev_row = df.iloc[i-1]
             
-            # Check Time
             candle_time = row['Timestamp'].time()
             is_valid_time = not (no_trade_start <= candle_time <= no_trade_end)
 
+            # 🚀 64.2% STRATEGY: MECHANICAL +5 PTS LOCK LOGIC
             for t in active_trades[:]:
-                if t['type'] == 'LONG':
-                    if not t['tsl_activated'] and row['High'] >= t['entry'] + t['atr_val']:
-                        t['sl'] = t['entry'] 
+                long = (t['type'] == 'LONG')
+                
+                # 1. Trailing SL to +5 Points (Mechanical Lock after 1 ATR)
+                if not t['tsl_activated']:
+                    if long and row['High'] >= t['entry'] + t['atr_val']:
+                        t['sl'] = t['entry'] + 5 
                         t['tsl_activated'] = True
-                        
-                    if row['High'] >= t['target']:
-                        targets_hit_today += 1
-                        active_trades.remove(t)
-                        latest_active_sl, latest_active_tp = None, None
-                    elif row['Low'] <= t['sl']:
-                        if t['tsl_activated']: cost_to_cost_today += 1
-                        else: sl_hit_today += 1
-                        active_trades.remove(t)
-                        latest_active_sl, latest_active_tp = None, None
-                        
-                elif t['type'] == 'SHORT':
-                    if not t['tsl_activated'] and row['Low'] <= t['entry'] - t['atr_val']:
-                        t['sl'] = t['entry'] 
+                    elif not long and row['Low'] <= t['entry'] - t['atr_val']:
+                        t['sl'] = t['entry'] - 5 
                         t['tsl_activated'] = True
-                        
-                    if row['Low'] <= t['target']:
-                        targets_hit_today += 1
-                        active_trades.remove(t)
-                        latest_active_sl, latest_active_tp = None, None
-                    elif row['High'] >= t['sl']:
-                        if t['tsl_activated']: cost_to_cost_today += 1
-                        else: sl_hit_today += 1
-                        active_trades.remove(t)
-                        latest_active_sl, latest_active_tp = None, None
+                
+                # 2. Standard Target and SL (Checks the +5 locked SL automatically)
+                if (long and row['High'] >= t['target']) or (not long and row['Low'] <= t['target']):
+                    targets_hit_today += 1
+                    active_trades.remove(t)
+                    latest_active_sl, latest_active_tp = None, None
+                elif (long and row['Low'] <= t['sl']) or (not long and row['High'] >= t['sl']):
+                    if t['tsl_activated']: 
+                        smart_exits_today += 1
+                    else: 
+                        sl_hit_today += 1
+                    active_trades.remove(t)
+                    latest_active_sl, latest_active_tp = None, None
 
             ce_score, ce_chk = get_ce_signal_and_checklist(row)
             pe_score, pe_chk = get_pe_signal_and_checklist(row)
             prev_ce_score, _ = get_ce_signal_and_checklist(prev_row)
             prev_pe_score, _ = get_pe_signal_and_checklist(prev_row)
             
-            # 🚀 TARGET UPDATED TO 2.0 ATR
+            # 🚀 GOLDEN RATIO: 1.5 SL, 2.0 TARGET
             sl_points = round(1.5 * row['ATR'], 2)
             target_points = round(2.0 * row['ATR'], 2)
-            
-            # 🚀 NEW: VOLUME OR RSI MANDATORY CONDITION (USING OPTIMIZED KEYS)
-            ce_vol_or_rsi_ok = ce_chk["Volume Surge (> 1.2x Avg) [+1 pt]"] or ce_chk["RSI (> 55 Bullish) [+1 pt]"]
-            pe_vol_or_rsi_ok = pe_chk["Volume Surge (> 1.2x Avg) [+1 pt]"] or pe_chk["RSI (< 45 Bearish) [+1 pt]"]
 
-            if ce_score >= 7 and prev_ce_score < 7 and is_valid_time and ce_vol_or_rsi_ok:
+            if ce_score >= 7 and prev_ce_score < 7 and is_valid_time:
                 total_signals_today += 1
                 active_trades.append({'type': 'LONG', 'entry': row['Close'], 'target': row['Close'] + target_points, 'sl': row['Close'] - sl_points, 'atr_val': row['ATR'], 'tsl_activated': False})
                 buy_x.append(row['Timestamp'])
@@ -252,7 +241,7 @@ if st.session_state['access_token']:
                 latest_active_sl = row['Close'] - sl_points
                 latest_active_tp = row['Close'] + target_points
                 
-            elif pe_score >= 7 and prev_pe_score < 7 and is_valid_time and pe_vol_or_rsi_ok:
+            elif pe_score >= 7 and prev_pe_score < 7 and is_valid_time:
                 total_signals_today += 1
                 active_trades.append({'type': 'SHORT', 'entry': row['Close'], 'target': row['Close'] - target_points, 'sl': row['Close'] + sl_points, 'atr_val': row['ATR'], 'tsl_activated': False})
                 sell_x.append(row['Timestamp'])
@@ -266,11 +255,11 @@ if st.session_state['access_token']:
         
         with col1: st.metric("Signals Triggered", total_signals_today)
         with col2: st.metric("🎯 Targets Hit", targets_hit_today)
-        with col3: st.metric("🛡️ Cost-to-Cost (Zero Loss)", cost_to_cost_today)
+        with col3: st.metric("🧠 Smart Exits (+5)", smart_exits_today)
         with col4: st.metric("🛑 Stop Loss Hit", sl_hit_today)
         with col5:
-            total_closed = targets_hit_today + sl_hit_today + cost_to_cost_today
-            win_rate = (targets_hit_today / total_closed * 100) if total_closed > 0 else 0
+            total_closed = targets_hit_today + sl_hit_today + smart_exits_today
+            win_rate = ((targets_hit_today + smart_exits_today) / total_closed * 100) if total_closed > 0 else 0
             st.metric("🏆 Win Rate (%)", f"{win_rate:.1f}%")
         st.markdown("---")
 
@@ -300,7 +289,28 @@ if st.session_state['access_token']:
             auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
         # --- 🎯 LIVE SIGNAL ALERT ---
-        st.subheader("🎯 Live Signal Alert")
+        st.subheader("🎯 Live Signal & Trade Alerts")
+        
+        # 🚀 64.2% SMART ALERT LOGIC (Manual Action Alert)
+        if len(active_trades) > 0:
+            current_trade = active_trades[-1]
+            trade_type = current_trade['type']
+            entry_price = current_trade['entry']
+            
+            if trade_type == 'LONG': current_profit = close - entry_price
+            else: current_profit = entry_price - close
+            
+            # Alert when profit shrinks towards our locked +5 SL
+            if current_trade['tsl_activated'] == True and 5 <= current_profit <= 10:
+                is_trend_dead = False
+                if trade_type == 'LONG' and close < latest['EMA_9']: is_trend_dead = True 
+                elif trade_type == 'SHORT' and close > latest['EMA_9']: is_trend_dead = True 
+                
+                if is_trend_dead:
+                    play_alert_sound()
+                    st.warning(f"### ⚠️ SMART ALERT: TREND REVERSAL DETECTED!")
+                    st.markdown(f"**Market momentum has slowed down!** Price has breached EMA 9. Your Stop Loss is secured at +5 points. You are currently in **+{current_profit:.2f} points profit**. Book your profits immediately! 💸")
+                    st.markdown("---")
         
         atm_strike = int(round(close / 50) * 50) 
         signal_time = latest['Timestamp'].strftime('%I:%M %p')
@@ -309,10 +319,6 @@ if st.session_state['access_token']:
         
         ce_score, ce_checklist = get_ce_signal_and_checklist(latest)
         pe_score, pe_checklist = get_pe_signal_and_checklist(latest)
-        
-        # 🚀 OPTIMIZED CHECKLIST KEYS
-        ce_vol_or_rsi_ok = ce_checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] or ce_checklist["RSI (> 55 Bullish) [+1 pt]"]
-        pe_vol_or_rsi_ok = pe_checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] or pe_checklist["RSI (< 45 Bearish) [+1 pt]"]
         
         def get_premium(opt_type):
             symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
@@ -328,7 +334,7 @@ if st.session_state['access_token']:
             st.warning("⏳ **NO TRADE ZONE (12:00 PM to 1:30 PM)**")
             st.markdown("Market is mostly sideways during this time. Please wait for the afternoon breakout.")
 
-        elif ce_score >= 7 and ce_vol_or_rsi_ok:
+        elif ce_score >= 7 and len(active_trades) == 0:
             play_alert_sound()
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
@@ -359,7 +365,7 @@ if st.session_state['access_token']:
             else:
                 st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Incorrect**")
                 
-        elif pe_score >= 7 and pe_vol_or_rsi_ok:
+        elif pe_score >= 7 and len(active_trades) == 0:
             play_alert_sound()
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
@@ -392,7 +398,7 @@ if st.session_state['access_token']:
                 
         else:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
-            st.markdown(f"**Current Trend is Weak or missing RSI/Volume strength.** \n* **CE Score:** {ce_score}/10 \n* **PE Score:** {pe_score}/10")
+            st.markdown(f"**Current Trend is Weak or missing momentum.** \n* **CE Score:** {ce_score}/10 \n* **PE Score:** {pe_score}/10")
             
         st.markdown("---")
 
