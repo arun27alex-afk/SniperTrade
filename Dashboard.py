@@ -280,7 +280,7 @@ if st.session_state['access_token']:
             st.metric(label="NIFTY 50 (Spot)", value=f"{close:,.2f}", delta=f"{change:.2f}")
             st.markdown("---")
             st.subheader("⚙️ Options Settings")
-            expiry_str = st.text_input("Enter Expiry (e.g., 26JUN)", "26JUN") 
+            expiry_str = st.text_input("Enter Expiry (e.g., 09JUL)", "09JUL") 
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
             total_qty = num_lots * 65  
             st.write(f"Total Quantity: **{total_qty} shares**")
