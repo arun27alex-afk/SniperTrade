@@ -172,6 +172,9 @@ if st.session_state['access_token']:
         df = pd.DataFrame(res['candles'])
         df.columns = ['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume']
         
+        # 🛠️ BUG FIX 1: Remove Duplicate Candles from Fyers
+        df.drop_duplicates(subset=['Timestamp'], keep='last', inplace=True)
+        
         df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
         
         # --- Indicators ---
@@ -212,7 +215,7 @@ if st.session_state['access_token']:
         smart_exits_today = 0
         
         active_trades = []
-        trade_history_log = [] # 📝 NEW: Trade History List
+        trade_history_log = [] 
         
         buy_x = []
         buy_y = []
@@ -222,6 +225,7 @@ if st.session_state['access_token']:
         latest_active_sl = None
         latest_active_tp = None
 
+        # 🛠️ BUG FIX 2: Removed 12:00 PM No Trade Zone (As you requested)
         no_trade_start = datetime.time(15, 30)
         no_trade_end = datetime.time(15, 30)
 
@@ -235,7 +239,11 @@ if st.session_state['access_token']:
             for t in active_trades[:]:
                 long = (t['type'] == 'LONG')
                 
-                # 1. Trailing SL to +5 Points (Mechanical Lock after 1 ATR)
+                # 🛠️ FEATURE 1: Calculating Strike Price for Table
+                strike_val = int(round(t['entry'] / 50) * 50)
+                opt_str = "CE" if long else "PE"
+                strike_name = f"{strike_val} {opt_str}"
+                
                 if not t['tsl_activated']:
                     if long and row['High'] >= t['entry'] + t['atr_val']:
                         t['sl'] = t['entry'] + 5 
@@ -244,11 +252,11 @@ if st.session_state['access_token']:
                         t['sl'] = t['entry'] - 5 
                         t['tsl_activated'] = True
                 
-                # 2. Standard Target and SL (Checks the +5 locked SL automatically)
                 if (long and row['High'] >= t['target']) or (not long and row['Low'] <= t['target']):
                     targets_hit_today += 1
                     trade_history_log.append({
                         "Type": t['type'], 
+                        "Strike": strike_name,
                         "Entry Time": t['entry_time'].strftime('%I:%M %p'), 
                         "Exit Time": row['Timestamp'].strftime('%I:%M %p'), 
                         "Entry (Spot)": t['entry'], 
@@ -263,6 +271,7 @@ if st.session_state['access_token']:
                         smart_exits_today += 1
                         trade_history_log.append({
                             "Type": t['type'], 
+                            "Strike": strike_name,
                             "Entry Time": t['entry_time'].strftime('%I:%M %p'), 
                             "Exit Time": row['Timestamp'].strftime('%I:%M %p'), 
                             "Entry (Spot)": t['entry'], 
@@ -272,6 +281,7 @@ if st.session_state['access_token']:
                         sl_hit_today += 1
                         trade_history_log.append({
                             "Type": t['type'], 
+                            "Strike": strike_name,
                             "Entry Time": t['entry_time'].strftime('%I:%M %p'), 
                             "Exit Time": row['Timestamp'].strftime('%I:%M %p'), 
                             "Entry (Spot)": t['entry'], 
@@ -321,27 +331,31 @@ if st.session_state['access_token']:
                 latest_active_sl = row['Close'] + sl_points
                 latest_active_tp = row['Close'] - target_points
 
+        # 🛠️ BUG FIX 3: Delete duplicate rows in Table completely
+        df_log = pd.DataFrame(trade_history_log).drop_duplicates()
+        
         # --- 📌 LIVE SCORECARD DASHBOARD ---
         st.subheader("📊 Today's Auto-Backtest Scorecard")
         col1, col2, col3, col4, col5 = st.columns(5)
         
-        with col1: 
-            st.metric("Signals Triggered", total_signals_today)
-        with col2: 
-            st.metric("🎯 Targets Hit", targets_hit_today)
-        with col3: 
-            st.metric("🧠 Smart Exits (+5)", smart_exits_today)
-        with col4: 
-            st.metric("🛑 Stop Loss Hit", sl_hit_today)
+        # Cleaned metrics
+        real_total_signals = len(df_log)
+        real_targets_hit = len(df_log[df_log['Result'] == '🎯 Target Hit']) if not df_log.empty else 0
+        real_smart_exits = len(df_log[df_log['Result'] == '🧠 Smart Exit (+5)']) if not df_log.empty else 0
+        real_sl_hit = len(df_log[df_log['Result'] == '🛑 SL Hit']) if not df_log.empty else 0
+        
+        with col1: st.metric("Signals Triggered", real_total_signals)
+        with col2: st.metric("🎯 Targets Hit", real_targets_hit)
+        with col3: st.metric("🧠 Smart Exits (+5)", real_smart_exits)
+        with col4: st.metric("🛑 Stop Loss Hit", real_sl_hit)
         with col5:
-            total_closed = targets_hit_today + sl_hit_today + smart_exits_today
-            win_rate = ((targets_hit_today + smart_exits_today) / total_closed * 100) if total_closed > 0 else 0
+            total_closed = real_targets_hit + real_sl_hit + real_smart_exits
+            win_rate = ((real_targets_hit + real_smart_exits) / total_closed * 100) if total_closed > 0 else 0
             st.metric("🏆 Win Rate (%)", f"{win_rate:.1f}%")
             
-        # 📝 NEW: Trade History Display
-        if len(trade_history_log) > 0:
+        if not df_log.empty:
             with st.expander("📝 View Today's Trade History", expanded=False):
-                st.dataframe(pd.DataFrame(trade_history_log), use_container_width=True)
+                st.dataframe(df_log, use_container_width=True)
                 
         st.markdown("---")
 
@@ -370,7 +384,6 @@ if st.session_state['access_token']:
         # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal & Trade Alerts")
         
-        # 🚨 NEW: Active Trade Status Alert
         if len(active_trades) > 0:
             current_trade = active_trades[0]
             trade_dir = "📈 CALL (BUY CE)" if current_trade['type'] == 'LONG' else "📉 PUT (BUY PE)"
@@ -384,23 +397,18 @@ if st.session_state['access_token']:
             act_col4.metric("🛑 Spot Stop Loss", f"{current_trade['sl']:.2f}")
             st.markdown("---")
         
-        # 🚀 SMART ALERT LOGIC (Manual Action Alert)
         if len(active_trades) > 0:
             current_trade = active_trades[-1]
             trade_type = current_trade['type']
             entry_price = current_trade['entry']
             
-            if trade_type == 'LONG': 
-                current_profit = close - entry_price
-            else: 
-                current_profit = entry_price - close
+            if trade_type == 'LONG': current_profit = close - entry_price
+            else: current_profit = entry_price - close
             
             if current_trade['tsl_activated'] == True and 5 <= current_profit <= 10:
                 is_trend_dead = False
-                if trade_type == 'LONG' and close < latest['EMA_9']: 
-                    is_trend_dead = True 
-                elif trade_type == 'SHORT' and close > latest['EMA_9']: 
-                    is_trend_dead = True 
+                if trade_type == 'LONG' and close < latest['EMA_9']: is_trend_dead = True 
+                elif trade_type == 'SHORT' and close > latest['EMA_9']: is_trend_dead = True 
                 
                 if is_trend_dead:
                     play_alert_sound()
@@ -420,10 +428,8 @@ if st.session_state['access_token']:
             symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
             try:
                 quote_res = fyers.quotes(data={"symbols": symbol})
-                if quote_res.get("s") == "ok": 
-                    return quote_res['d'][0]['v']['lp']
-            except: 
-                pass
+                if quote_res.get("s") == "ok": return quote_res['d'][0]['v']['lp']
+            except: pass
             return 0.0
 
         if not is_live_valid_time:
@@ -436,13 +442,10 @@ if st.session_state['access_token']:
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
             
             st.success(f"### 🟢 MARKET GOING UP - BUY CE (Score: {ce_score}/10) @ {signal_time}")
-            
             st.markdown("### 📊 Indicator Checklist")
             for indicator, is_matched in ce_checklist.items():
-                if is_matched: 
-                    st.markdown(f"✅ **{indicator}**: Aligned")
-                else: 
-                    st.markdown(f"❌ **{indicator}**: Not Aligned")
+                if is_matched: st.markdown(f"✅ **{indicator}**: Aligned")
+                else: st.markdown(f"❌ **{indicator}**: Not Aligned")
             
             if premium > 0:
                 t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
@@ -454,17 +457,12 @@ if st.session_state['access_token']:
                 
                 st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 st.write("")
-                
                 if st.button(f"🚀 BUY {atm_strike} CE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
-                    if order_res.get("s") == "ok": 
-                        st.balloons()
-                        st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
-                    else: 
-                        st.error(f"❌ Order Failed: {order_res.get('message')}")
-            else: 
-                st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Incorrect**")
+                    if order_res.get("s") == "ok": st.balloons(); st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
+                    else: st.error(f"❌ Order Failed: {order_res.get('message')}")
+            else: st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Incorrect**")
                 
         elif pe_score >= 7 and len(active_trades) == 0:
             play_alert_sound()
@@ -472,13 +470,10 @@ if st.session_state['access_token']:
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
             
             st.error(f"### 🔴 MARKET GOING DOWN - BUY PE (Score: {pe_score}/10) @ {signal_time}")
-            
             st.markdown("### 📊 Indicator Checklist")
             for indicator, is_matched in pe_checklist.items():
-                if is_matched: 
-                    st.markdown(f"✅ **{indicator}**: Aligned")
-                else: 
-                    st.markdown(f"❌ **{indicator}**: Not Aligned")
+                if is_matched: st.markdown(f"✅ **{indicator}**: Aligned")
+                else: st.markdown(f"❌ **{indicator}**: Not Aligned")
             
             if premium > 0:
                 t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
@@ -490,17 +485,12 @@ if st.session_state['access_token']:
                 
                 st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 st.write("")
-                
                 if st.button(f"🚀 BUY {atm_strike} PE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
-                    if order_res.get("s") == "ok": 
-                        st.balloons()
-                        st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
-                    else: 
-                        st.error(f"❌ Order Failed: {order_res.get('message')}")
-            else: 
-                st.warning(f"Strike: {atm_strike} PE - **Market Closed or Expiry Incorrect**")
+                    if order_res.get("s") == "ok": st.balloons(); st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
+                    else: st.error(f"❌ Order Failed: {order_res.get('message')}")
+            else: st.warning(f"Strike: {atm_strike} PE - **Market Closed or Expiry Incorrect**")
                 
         elif len(active_trades) == 0:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
