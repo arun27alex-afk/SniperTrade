@@ -222,8 +222,8 @@ if st.session_state['access_token']:
         latest_active_sl = None
         latest_active_tp = None
 
-        no_trade_start = datetime.time(12, 0)
-        no_trade_end = datetime.time(13, 30)
+        no_trade_start = datetime.time(15, 30)
+        no_trade_end = datetime.time(15, 30)
 
         for i in range(1, len(df)):
             row = df.iloc[i]
