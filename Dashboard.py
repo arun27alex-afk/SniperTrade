@@ -11,7 +11,7 @@ import time
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
 CLIENT_ID = "BT8FRQLN19-200"       
-SECRET_KEY = "0ivLeQN8vdI2VyKA"  # ⚠️ Hidden for security      
+SECRET_KEY = "0ivLeQN8vdI2VyKA"  # ⚠️ உங்களின் Secret Key-ஐ இங்கே போடவும்     
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/" 
 # ==========================================
 
@@ -32,40 +32,28 @@ def get_ce_signal_and_checklist(data, atr_min=5):
     checklist = {}
     
     if data['EMA_9'] > data['EMA_21']:
-        score += 2
-        checklist["EMA 9/21 (9 EMA > 21 EMA) [+2 pts]"] = True
-    else: 
-        checklist["EMA 9/21 (9 EMA > 21 EMA) [+2 pts]"] = False
+        score += 2; checklist["EMA 9/21 (9 EMA > 21 EMA) [+2 pts]"] = True
+    else: checklist["EMA 9/21 (9 EMA > 21 EMA) [+2 pts]"] = False
         
     if data['Close'] > data['VWAP']:
-        score += 2
-        checklist["VWAP (Price > VWAP) [+2 pts]"] = True
-    else: 
-        checklist["VWAP (Price > VWAP) [+2 pts]"] = False
+        score += 2; checklist["VWAP (Price > VWAP) [+2 pts]"] = True
+    else: checklist["VWAP (Price > VWAP) [+2 pts]"] = False
         
     if data['ATR'] > atr_min:
-        score += 2
-        checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = True
-    else: 
-        checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = False
+        score += 2; checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = True
+    else: checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = False
         
     if data['MACD_Line'] > data['Signal_Line']:
-        score += 2
-        checklist["MACD (MACD > Signal) [+2 pts]"] = True
-    else: 
-        checklist["MACD (MACD > Signal) [+2 pts]"] = False
+        score += 2; checklist["MACD (MACD > Signal) [+2 pts]"] = True
+    else: checklist["MACD (MACD > Signal) [+2 pts]"] = False
         
     if data['RSI'] > 55:
-        score += 1
-        checklist["RSI (> 55 Bullish) [+1 pt]"] = True
-    else: 
-        checklist["RSI (> 55 Bullish) [+1 pt]"] = False
+        score += 1; checklist["RSI (> 55 Bullish) [+1 pt]"] = True
+    else: checklist["RSI (> 55 Bullish) [+1 pt]"] = False
         
     if data['Volume'] > (data['Volume_SMA_20'] * 1.2):
-        score += 1
-        checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
-    else: 
-        checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = False
+        score += 1; checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
+    else: checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = False
     
     return score, checklist
 
@@ -74,42 +62,31 @@ def get_pe_signal_and_checklist(data, atr_min=5):
     checklist = {}
     
     if data['EMA_9'] < data['EMA_21']:
-        score += 2
-        checklist["EMA 9/21 (9 EMA < 21 EMA) [+2 pts]"] = True
-    else: 
-        checklist["EMA 9/21 (9 EMA < 21 EMA) [+2 pts]"] = False
+        score += 2; checklist["EMA 9/21 (9 EMA < 21 EMA) [+2 pts]"] = True
+    else: checklist["EMA 9/21 (9 EMA < 21 EMA) [+2 pts]"] = False
         
     if data['Close'] < data['VWAP']:
-        score += 2
-        checklist["VWAP (Price < VWAP) [+2 pts]"] = True
-    else: 
-        checklist["VWAP (Price < VWAP) [+2 pts]"] = False
+        score += 2; checklist["VWAP (Price < VWAP) [+2 pts]"] = True
+    else: checklist["VWAP (Price < VWAP) [+2 pts]"] = False
         
     if data['ATR'] > atr_min:
-        score += 2
-        checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = True
-    else: 
-        checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = False
+        score += 2; checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = True
+    else: checklist[f"ATR Momentum (> {atr_min}) [+2 pts]"] = False
         
     if data['MACD_Line'] < data['Signal_Line']:
-        score += 2
-        checklist["MACD (MACD < Signal) [+2 pts]"] = True
-    else: 
-        checklist["MACD (MACD < Signal) [+2 pts]"] = False
+        score += 2; checklist["MACD (MACD < Signal) [+2 pts]"] = True
+    else: checklist["MACD (MACD < Signal) [+2 pts]"] = False
         
     if data['RSI'] < 45:
-        score += 1
-        checklist["RSI (< 45 Bearish) [+1 pt]"] = True
-    else: 
-        checklist["RSI (< 45 Bearish) [+1 pt]"] = False
+        score += 1; checklist["RSI (< 45 Bearish) [+1 pt]"] = True
+    else: checklist["RSI (< 45 Bearish) [+1 pt]"] = False
         
     if data['Volume'] > (data['Volume_SMA_20'] * 1.2):
-        score += 1
-        checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
-    else: 
-        checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = False
+        score += 1; checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
+    else: checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = False
     
     return score, checklist
+
 # -----------------------------------------------
 
 st.title("🎯 Sniper Trade App (NIFTY 50 Live & Algo Execution)")
@@ -120,13 +97,7 @@ if 'access_token' not in st.session_state:
 
 query_params = st.query_params
 if "auth_code" in query_params:
-    session = fyersModel.SessionModel(
-        client_id=CLIENT_ID, 
-        secret_key=SECRET_KEY, 
-        redirect_uri=REDIRECT_URI, 
-        response_type="code", 
-        grant_type="authorization_code"
-    )
+    session = fyersModel.SessionModel(client_id=CLIENT_ID, secret_key=SECRET_KEY, redirect_uri=REDIRECT_URI, response_type="code", grant_type="authorization_code")
     session.set_token(query_params["auth_code"])
     response = session.generate_token()
     if response.get("s") == "ok":
@@ -137,12 +108,7 @@ if "auth_code" in query_params:
 
 if not st.session_state['access_token']:
     st.subheader("🔑 Step 1: 1-Click Fyers Login")
-    session = fyersModel.SessionModel(
-        client_id=CLIENT_ID, 
-        redirect_uri=REDIRECT_URI, 
-        response_type="code", 
-        grant_type="authorization_code"
-    )
+    session = fyersModel.SessionModel(client_id=CLIENT_ID, redirect_uri=REDIRECT_URI, response_type="code", grant_type="authorization_code")
     auth_url = session.generate_authcode()
     st.markdown(f"**[👉 Click Here to Login to Fyers]({auth_url})**")
 
@@ -150,34 +116,20 @@ if st.session_state['access_token']:
     fyers = fyersModel.FyersModel(client_id=CLIENT_ID, is_async=False, token=st.session_state['access_token'], log_path="")
     
     today = datetime.date.today()
-    if today.weekday() == 5: 
-        today_date = (today - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-    elif today.weekday() == 6: 
-        today_date = (today - datetime.timedelta(days=2)).strftime('%Y-%m-%d')
-    else: 
-        today_date = today.strftime('%Y-%m-%d')
+    if today.weekday() == 5: today_date = (today - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+    elif today.weekday() == 6: today_date = (today - datetime.timedelta(days=2)).strftime('%Y-%m-%d')
+    else: today_date = today.strftime('%Y-%m-%d')
 
-    data = {
-        "symbol": "NSE:NIFTY50-INDEX",  
-        "resolution": "5",
-        "date_format": "1",
-        "range_from": today_date,
-        "range_to": today_date,
-        "cont_flag": "1"
-    }
-    
+    data = {"symbol": "NSE:NIFTY50-INDEX", "resolution": "5", "date_format": "1", "range_from": today_date, "range_to": today_date, "cont_flag": "1"}
     res = fyers.history(data=data)
     
     if res.get("s") == "ok" and 'candles' in res and len(res['candles']) > 0:
         df = pd.DataFrame(res['candles'])
         df.columns = ['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume']
-        
-        # 🛠️ BUG FIX 1: Remove Duplicate Candles from Fyers
         df.drop_duplicates(subset=['Timestamp'], keep='last', inplace=True)
-        
         df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
         
-        # --- Indicators ---
+        # --- Indicators (Exactly as per Original Code) ---
         df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
         df['VWAP'] = (df['Typical_Price'] * df['Volume']).cumsum() / df['Volume'].cumsum()
         df['VWAP'] = df['VWAP'].fillna(df['Close']) 
@@ -208,8 +160,7 @@ if st.session_state['access_token']:
         
         df = df.round(2)
         
-        # --- 🤖 AUTO-BACKTEST & CHART MARKERS LOGIC ---
-        total_signals_today = 0
+        # --- 🤖 AUTO-BACKTEST ENGINE (Original Rules) ---
         targets_hit_today = 0
         sl_hit_today = 0
         smart_exits_today = 0
@@ -217,17 +168,13 @@ if st.session_state['access_token']:
         active_trades = []
         trade_history_log = [] 
         
-        buy_x = []
-        buy_y = []
-        sell_x = []
-        sell_y = []
-        
+        buy_x, buy_y, sell_x, sell_y = [], [], [], []
         latest_active_sl = None
         latest_active_tp = None
 
-        # 🛠️ BUG FIX 2: Removed 12:00 PM No Trade Zone (As you requested)
-        no_trade_start = datetime.time(15, 30)
-        no_trade_end = datetime.time(15, 30)
+        # 🔥 RESTORED NO TRADE ZONE (From your exact code)
+        no_trade_start = datetime.time(12, 0)
+        no_trade_end = datetime.time(13, 30)
 
         for i in range(1, len(df)):
             row = df.iloc[i]
@@ -239,11 +186,11 @@ if st.session_state['access_token']:
             for t in active_trades[:]:
                 long = (t['type'] == 'LONG')
                 
-                # 🛠️ FEATURE 1: Calculating Strike Price for Table
                 strike_val = int(round(t['entry'] / 50) * 50)
                 opt_str = "CE" if long else "PE"
                 strike_name = f"{strike_val} {opt_str}"
                 
+                # 🚀 THE 63.9% MAGIC: Mechanical +5 Pts Trailing Lock
                 if not t['tsl_activated']:
                     if long and row['High'] >= t['entry'] + t['atr_val']:
                         t['sl'] = t['entry'] + 5 
@@ -252,44 +199,22 @@ if st.session_state['access_token']:
                         t['sl'] = t['entry'] - 5 
                         t['tsl_activated'] = True
                 
+                # Target & SL Execution
                 if (long and row['High'] >= t['target']) or (not long and row['Low'] <= t['target']):
                     targets_hit_today += 1
-                    trade_history_log.append({
-                        "Type": t['type'], 
-                        "Strike": strike_name,
-                        "Entry Time": t['entry_time'].strftime('%I:%M %p'), 
-                        "Exit Time": row['Timestamp'].strftime('%I:%M %p'), 
-                        "Entry (Spot)": t['entry'], 
-                        "Result": "🎯 Target Hit"
-                    })
+                    trade_history_log.append({"Type": t['type'], "Strike": strike_name, "Entry Time": t['entry_time'].strftime('%I:%M %p'), "Exit Time": row['Timestamp'].strftime('%I:%M %p'), "Entry (Spot)": t['entry'], "Result": "🎯 Target Hit"})
                     active_trades.remove(t)
-                    latest_active_sl = None
-                    latest_active_tp = None
+                    latest_active_sl, latest_active_tp = None, None
                     
                 elif (long and row['Low'] <= t['sl']) or (not long and row['High'] >= t['sl']):
                     if t['tsl_activated']: 
                         smart_exits_today += 1
-                        trade_history_log.append({
-                            "Type": t['type'], 
-                            "Strike": strike_name,
-                            "Entry Time": t['entry_time'].strftime('%I:%M %p'), 
-                            "Exit Time": row['Timestamp'].strftime('%I:%M %p'), 
-                            "Entry (Spot)": t['entry'], 
-                            "Result": "🧠 Smart Exit (+5)"
-                        })
+                        trade_history_log.append({"Type": t['type'], "Strike": strike_name, "Entry Time": t['entry_time'].strftime('%I:%M %p'), "Exit Time": row['Timestamp'].strftime('%I:%M %p'), "Entry (Spot)": t['entry'], "Result": "🧠 Smart Exit (+5)"})
                     else: 
                         sl_hit_today += 1
-                        trade_history_log.append({
-                            "Type": t['type'], 
-                            "Strike": strike_name,
-                            "Entry Time": t['entry_time'].strftime('%I:%M %p'), 
-                            "Exit Time": row['Timestamp'].strftime('%I:%M %p'), 
-                            "Entry (Spot)": t['entry'], 
-                            "Result": "🛑 SL Hit"
-                        })
+                        trade_history_log.append({"Type": t['type'], "Strike": strike_name, "Entry Time": t['entry_time'].strftime('%I:%M %p'), "Exit Time": row['Timestamp'].strftime('%I:%M %p'), "Entry (Spot)": t['entry'], "Result": "🛑 SL Hit"})
                     active_trades.remove(t)
-                    latest_active_sl = None
-                    latest_active_tp = None
+                    latest_active_sl, latest_active_tp = None, None
 
             ce_score, _ = get_ce_signal_and_checklist(row)
             pe_score, _ = get_pe_signal_and_checklist(row)
@@ -300,45 +225,25 @@ if st.session_state['access_token']:
             target_points = round(2.0 * row['ATR'], 2)
 
             if ce_score >= 7 and prev_ce_score < 7 and is_valid_time and len(active_trades) == 0:
-                total_signals_today += 1
-                active_trades.append({
-                    'type': 'LONG', 
-                    'entry': row['Close'], 
-                    'target': row['Close'] + target_points, 
-                    'sl': row['Close'] - sl_points, 
-                    'atr_val': row['ATR'], 
-                    'tsl_activated': False, 
-                    'entry_time': row['Timestamp']
-                })
+                active_trades.append({'type': 'LONG', 'entry': row['Close'], 'target': row['Close'] + target_points, 'sl': row['Close'] - sl_points, 'atr_val': row['ATR'], 'tsl_activated': False, 'entry_time': row['Timestamp']})
                 buy_x.append(row['Timestamp'])
                 buy_y.append(row['Low'] - 15) 
                 latest_active_sl = row['Close'] - sl_points
                 latest_active_tp = row['Close'] + target_points
                 
             elif pe_score >= 7 and prev_pe_score < 7 and is_valid_time and len(active_trades) == 0:
-                total_signals_today += 1
-                active_trades.append({
-                    'type': 'SHORT', 
-                    'entry': row['Close'], 
-                    'target': row['Close'] - target_points, 
-                    'sl': row['Close'] + sl_points, 
-                    'atr_val': row['ATR'], 
-                    'tsl_activated': False, 
-                    'entry_time': row['Timestamp']
-                })
+                active_trades.append({'type': 'SHORT', 'entry': row['Close'], 'target': row['Close'] - target_points, 'sl': row['Close'] + sl_points, 'atr_val': row['ATR'], 'tsl_activated': False, 'entry_time': row['Timestamp']})
                 sell_x.append(row['Timestamp'])
                 sell_y.append(row['High'] + 15) 
                 latest_active_sl = row['Close'] + sl_points
                 latest_active_tp = row['Close'] - target_points
 
-        # 🛠️ BUG FIX 3: Delete duplicate rows in Table completely
         df_log = pd.DataFrame(trade_history_log).drop_duplicates()
         
         # --- 📌 LIVE SCORECARD DASHBOARD ---
         st.subheader("📊 Today's Auto-Backtest Scorecard")
         col1, col2, col3, col4, col5 = st.columns(5)
         
-        # Cleaned metrics
         real_total_signals = len(df_log)
         real_targets_hit = len(df_log[df_log['Result'] == '🎯 Target Hit']) if not df_log.empty else 0
         real_smart_exits = len(df_log[df_log['Result'] == '🧠 Smart Exit (+5)']) if not df_log.empty else 0
@@ -387,7 +292,6 @@ if st.session_state['access_token']:
         if len(active_trades) > 0:
             current_trade = active_trades[0]
             trade_dir = "📈 CALL (BUY CE)" if current_trade['type'] == 'LONG' else "📉 PUT (BUY PE)"
-            box_color = "success" if current_trade['type'] == 'LONG' else "error"
             
             st.warning(f"⏳ **ACTIVE TRADE RUNNING:** A {trade_dir} trade is currently active. The Algo is waiting for this trade to hit Target or Stop Loss before looking for new setups.")
             act_col1, act_col2, act_col3, act_col4 = st.columns(4)
@@ -419,6 +323,8 @@ if st.session_state['access_token']:
         atm_strike = int(round(close / 50) * 50) 
         signal_time = latest['Timestamp'].strftime('%I:%M %p')
         latest_time_obj = latest['Timestamp'].time()
+        
+        # ⚠️ Strict Validation of No Trade Zone for New Signals
         is_live_valid_time = not (no_trade_start <= latest_time_obj <= no_trade_end)
         
         ce_score, ce_checklist = get_ce_signal_and_checklist(latest)
@@ -434,7 +340,7 @@ if st.session_state['access_token']:
 
         if not is_live_valid_time:
             st.warning("⏳ **NO TRADE ZONE (12:00 PM to 1:30 PM)**")
-            st.markdown("Market is mostly sideways during this time. Please wait for the afternoon breakout.")
+            st.markdown("Market is highly volatile or sideways during this time. The Algo is resting to protect your capital.")
 
         elif ce_score >= 7 and len(active_trades) == 0:
             play_alert_sound()
@@ -498,7 +404,7 @@ if st.session_state['access_token']:
             
         st.markdown("---")
 
-        # --- 🎨 NEW: MINI HUD DASHBOARD ---
+        # --- 🎨 MINI HUD DASHBOARD ---
         st.subheader("🖥️ Live Market HUD")
         hud_c1, hud_c2, hud_c3, hud_c4 = st.columns(4)
         
