@@ -47,9 +47,10 @@ def get_ce_signal_and_checklist(data, atr_min=5):
         score += 2; checklist["MACD (MACD > Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD > Signal) [+2 pts]"] = False
         
-    if data['RSI'] > 55:
-        score += 1; checklist["RSI (> 55 Bullish) [+1 pt]"] = True
-    else: checklist["RSI (> 55 Bullish) [+1 pt]"] = False
+    # 🔥 RSI Removed & ADX 14 Added
+    if data['ADX_14'] > 20:
+        score += 1; checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = True
+    else: checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = False
         
     if data['Volume'] > (data['Volume_SMA_20'] * 1.2):
         score += 1; checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
@@ -77,9 +78,10 @@ def get_pe_signal_and_checklist(data, atr_min=5):
         score += 2; checklist["MACD (MACD < Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD < Signal) [+2 pts]"] = False
         
-    if data['RSI'] < 45:
-        score += 1; checklist["RSI (< 45 Bearish) [+1 pt]"] = True
-    else: checklist["RSI (< 45 Bearish) [+1 pt]"] = False
+    # 🔥 RSI Removed & ADX 14 Added
+    if data['ADX_14'] > 20:
+        score += 1; checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = True
+    else: checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = False
         
     if data['Volume'] > (data['Volume_SMA_20'] * 1.2):
         score += 1; checklist["Volume Surge (> 1.2x Avg) [+1 pt]"] = True
@@ -129,7 +131,7 @@ if st.session_state['access_token']:
         df.drop_duplicates(subset=['Timestamp'], keep='last', inplace=True)
         df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
         
-        # --- Indicators (Exactly as per Original Code) ---
+        # --- Indicators ---
         df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
         df['VWAP'] = (df['Typical_Price'] * df['Volume']).cumsum() / df['Volume'].cumsum()
         df['VWAP'] = df['VWAP'].fillna(df['Close']) 
@@ -143,24 +145,32 @@ if st.session_state['access_token']:
         df['MACD_Line'] = df['EMA_12'] - df['EMA_26']
         df['Signal_Line'] = df['MACD_Line'].ewm(span=9, adjust=False).mean()
         
-        delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['RSI'] = 100 - (100 / (1 + rs))
-        df['RSI'] = df['RSI'].fillna(50)
-        
+        # ATR Calculation (Moved before ADX)
         df['Prev_Close'] = df['Close'].shift(1)
         tr1 = df['High'] - df['Low']
         tr2 = (df['High'] - df['Prev_Close']).abs()
         tr3 = (df['Low'] - df['Prev_Close']).abs()
         df['TR'] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        df['ATR'] = df['TR'].rolling(window=14).mean()
-        df['ATR'] = df['ATR'].fillna(10)
+        df['ATR'] = df['TR'].rolling(window=14).mean().fillna(10)
+        
+        # 🔥 ADX 14 Calculation Added
+        up = df['High'] - df['High'].shift(1)
+        down = df['Low'].shift(1) - df['Low']
+        df['+DM'] = np.where((up > down) & (up > 0), up, 0.0)
+        df['-DM'] = np.where((down > up) & (down > 0), down, 0.0)
+        
+        df['+DI'] = 100 * (df['+DM'].ewm(alpha=1/14, adjust=False).mean() / df['ATR'])
+        df['-DI'] = 100 * (df['-DM'].ewm(alpha=1/14, adjust=False).mean() / df['ATR'])
+        
+        dx_den = df['+DI'] + df['-DI']
+        dx_den = dx_den.replace(0, np.nan) 
+        df['DX'] = 100 * (abs(df['+DI'] - df['-DI']) / dx_den)
+        df['DX'] = df['DX'].fillna(0)
+        df['ADX_14'] = df['DX'].ewm(alpha=1/14, adjust=False).mean().fillna(0)
         
         df = df.round(2)
         
-        # --- 🤖 AUTO-BACKTEST ENGINE (Original Rules) ---
+        # --- 🤖 AUTO-BACKTEST ENGINE ---
         targets_hit_today = 0
         sl_hit_today = 0
         smart_exits_today = 0
@@ -172,7 +182,6 @@ if st.session_state['access_token']:
         latest_active_sl = None
         latest_active_tp = None
 
-        # 🔥 RESTORED NO TRADE ZONE (From your exact code)
         no_trade_start = datetime.time(12, 0)
         no_trade_end = datetime.time(13, 30)
 
@@ -190,7 +199,6 @@ if st.session_state['access_token']:
                 opt_str = "CE" if long else "PE"
                 strike_name = f"{strike_val} {opt_str}"
                 
-                # 🚀 THE 63.9% MAGIC: Mechanical +5 Pts Trailing Lock
                 if not t['tsl_activated']:
                     if long and row['High'] >= t['entry'] + t['atr_val']:
                         t['sl'] = t['entry'] + 5 
@@ -199,7 +207,6 @@ if st.session_state['access_token']:
                         t['sl'] = t['entry'] - 5 
                         t['tsl_activated'] = True
                 
-                # Target & SL Execution
                 if (long and row['High'] >= t['target']) or (not long and row['Low'] <= t['target']):
                     targets_hit_today += 1
                     trade_history_log.append({"Type": t['type'], "Strike": strike_name, "Entry Time": t['entry_time'].strftime('%I:%M %p'), "Exit Time": row['Timestamp'].strftime('%I:%M %p'), "Entry (Spot)": t['entry'], "Result": "🎯 Target Hit"})
@@ -324,7 +331,6 @@ if st.session_state['access_token']:
         signal_time = latest['Timestamp'].strftime('%I:%M %p')
         latest_time_obj = latest['Timestamp'].time()
         
-        # ⚠️ Strict Validation of No Trade Zone for New Signals
         is_live_valid_time = not (no_trade_start <= latest_time_obj <= no_trade_end)
         
         ce_score, ce_checklist = get_ce_signal_and_checklist(latest)
@@ -404,16 +410,17 @@ if st.session_state['access_token']:
             
         st.markdown("---")
 
-        # --- 🎨 MINI HUD DASHBOARD ---
+        # --- 🎨 MINI HUD DASHBOARD (UPDATED FOR ADX) ---
         st.subheader("🖥️ Live Market HUD")
         hud_c1, hud_c2, hud_c3, hud_c4 = st.columns(4)
         
-        rsi_color = "🟢 Bullish" if latest['RSI'] > 55 else "🔴 Bearish" if latest['RSI'] < 45 else "🟡 Neutral"
+        # 🔥 UI updated to show ADX status instead of RSI
+        adx_color = "🟢 Strong Trend" if latest['ADX_14'] > 20 else "🔴 Weak/Sideways"
         atr_color = "🟢 Good Volatility" if current_atr > 5 else "🔴 Sideways (<5)"
         trend_color = "🟢 BUY Zone" if latest['EMA_9'] > latest['EMA_21'] else "🔴 SELL Zone"
         vwap_color = "🟢 Above VWAP" if close > latest['VWAP'] else "🔴 Below VWAP"
         
-        hud_c1.info(f"**RSI (14):** {latest['RSI']:.2f} \n\n {rsi_color}")
+        hud_c1.info(f"**ADX (14):** {latest['ADX_14']:.2f} \n\n {adx_color}")
         hud_c2.info(f"**ATR (14):** {current_atr:.2f} \n\n {atr_color}")
         hud_c3.info(f"**Trend (EMA):** \n\n {trend_color}")
         hud_c4.info(f"**VWAP Status:** \n\n {vwap_color}")
