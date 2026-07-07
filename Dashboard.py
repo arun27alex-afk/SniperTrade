@@ -294,57 +294,53 @@ if st.session_state['access_token']:
             auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
         # ==========================================
-            # 🌍 GLOBAL SENTIMENT & RANGE PREDICTOR
+            # 🌍 DAILY TREND & RANGE PREDICTOR
             # ==========================================
             st.markdown("---")
-            st.header("🌍 Global Sentiment")
+            st.header("📊 Pre-Market Analysis")
             
-            # TradingView Mini Widget for Global Markets (Zero Delay)
-            tv_widget = """
-            <!-- TradingView Widget BEGIN -->
-            <div class="tradingview-widget-container">
-              <div class="tradingview-widget-container__widget"></div>
-              <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-              {
-              "symbols": [
-                [
-                  "GIFT Nifty",
-                  "TVC:NIY1!"
-                ],
-                [
-                  "Dow Jones",
-                  "FOREXCOM:DJI"
-                ]
-              ],
-              "colorTheme": "light",
-              "isTransparent": true,
-              "autosize": true,
-              "largeChartUrl": ""
-            }
-              </script>
-            </div>
-            <!-- TradingView Widget END -->
-            """
-            st.components.v1.html(tv_widget, height=230)
+            # 1. Daily Trend Prediction (Based on Daily Timeframe)
+            try:
+                # கடந்த 30 நாட்களின் Daily டேட்டாவை எடுத்து அனலைஸ் செய்வது
+                start_d = (today - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+                data_d = {"symbol": "NSE:NIFTY50-INDEX", "resolution": "D", "date_format": "1", "range_from": start_d, "range_to": today_date, "cont_flag": "1"}
+                res_d = fyers.history(data=data_d)
+                
+                if res_d.get("s") == "ok" and len(res_d['candles']) > 0:
+                    df_d = pd.DataFrame(res_d['candles'], columns=['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
+                    df_d['EMA_9'] = df_d['Close'].ewm(span=9, adjust=False).mean()
+                    df_d['EMA_21'] = df_d['Close'].ewm(span=21, adjust=False).mean()
+                    
+                    last_d = df_d.iloc[-1]
+                    
+                    # Daily Trend Logic
+                    if last_d['EMA_9'] > last_d['EMA_21'] and last_d['Close'] > last_d['EMA_9']:
+                        trend_msg = "🟢 UPTREND (Buy on Dips)"
+                    elif last_d['EMA_9'] < last_d['EMA_21'] and last_d['Close'] < last_d['EMA_9']:
+                        trend_msg = "🔴 DOWNTREND (Sell on Rise)"
+                    else:
+                        trend_msg = "🟡 SIDEWAYS (Trade with Caution)"
+                        
+                    st.info(f"**Today's Market Trend:**\n### {trend_msg}")
+            except Exception as e:
+                st.warning("Trend data loading...")
 
-            # 🎯 Today's Strike Price Range Predictor (Pivot Formula)
+            # 2. Today's Strike Price Range Predictor (Pivot Formula)
             st.subheader("🎯 Expected Range (Today)")
             
-            # முந்தைய நாளின் ஏற்ற இறக்கங்களை வைத்து இன்றைய எல்லையைக் கணிப்பது
             today_high = df['High'].max()
             today_low = df['Low'].min()
             pp = (today_high + today_low + close) / 3
             r1 = (2 * pp) - today_low
             s1 = (2 * pp) - today_high
             
-            # அல்கோ ஸ்ட்ரைக் பிரைஸை ரவுண்ட் செய்வது (எ.கா: 24400, 24450)
             ce_strike_range = int(round(r1 / 50) * 50)
             pe_strike_range = int(round(s1 / 50) * 50)
             
-            st.info(f"📈 **Max Upside (Resistance):** {ce_strike_range} CE\n\n📉 **Max Downside (Support):** {pe_strike_range} PE")
-            st.caption("💡 Based on real-time Pivot Points & Volatility. Market is expected to trade within this zone today.")
-            # ==========================================
-        
+            st.success(f"📈 **Max Upside (Resistance):** {ce_strike_range} CE\n\n📉 **Max Downside (Support):** {pe_strike_range} PE")
+            st.caption("💡 Note: Market usually trades within this zone, but strong ADX momentum can break these levels!")
+            # ==========================================        
+       
         # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal & Trade Alerts")
         
