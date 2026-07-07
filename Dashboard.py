@@ -293,6 +293,58 @@ if st.session_state['access_token']:
             st.markdown("---")
             auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
+        # ==========================================
+            # 🌍 GLOBAL SENTIMENT & RANGE PREDICTOR
+            # ==========================================
+            st.markdown("---")
+            st.header("🌍 Global Sentiment")
+            
+            # TradingView Mini Widget for Global Markets (Zero Delay)
+            tv_widget = """
+            <!-- TradingView Widget BEGIN -->
+            <div class="tradingview-widget-container">
+              <div class="tradingview-widget-container__widget"></div>
+              <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
+              {
+              "symbols": [
+                [
+                  "GIFT Nifty",
+                  "TVC:NIY1!"
+                ],
+                [
+                  "Dow Jones",
+                  "FOREXCOM:DJI"
+                ]
+              ],
+              "colorTheme": "light",
+              "isTransparent": true,
+              "autosize": true,
+              "largeChartUrl": ""
+            }
+              </script>
+            </div>
+            <!-- TradingView Widget END -->
+            """
+            st.components.v1.html(tv_widget, height=230)
+
+            # 🎯 Today's Strike Price Range Predictor (Pivot Formula)
+            st.subheader("🎯 Expected Range (Today)")
+            
+            # முந்தைய நாளின் ஏற்ற இறக்கங்களை வைத்து இன்றைய எல்லையைக் கணிப்பது
+            today_high = df['High'].max()
+            today_low = df['Low'].min()
+            pp = (today_high + today_low + close) / 3
+            r1 = (2 * pp) - today_low
+            s1 = (2 * pp) - today_high
+            
+            # அல்கோ ஸ்ட்ரைக் பிரைஸை ரவுண்ட் செய்வது (எ.கா: 24400, 24450)
+            ce_strike_range = int(round(r1 / 50) * 50)
+            pe_strike_range = int(round(s1 / 50) * 50)
+            
+            st.info(f"📈 **Max Upside (Resistance):** {ce_strike_range} CE\n\n📉 **Max Downside (Support):** {pe_strike_range} PE")
+            st.caption("💡 Based on real-time Pivot Points & Volatility. Market is expected to trade within this zone today.")
+            # ==========================================
+        
         # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal & Trade Alerts")
         
