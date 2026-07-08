@@ -507,7 +507,7 @@ if st.session_state['access_token']:
                     else: st.error(f"❌ Order Failed: {order_res.get('message')}")
             else: st.warning(f"Strike: {atm_strike} PE - **Market Closed or Expiry Incorrect**")
                 
-        elif len(active_trades) == 0:
+        else:
             st.warning(f"### 🟡 WAITING FOR PERFECT SETUP")
             st.markdown(f"**Current Trend is Weak or missing momentum.** \n* **CE Score:** {ce_score}/10 \n* **PE Score:** {pe_score}/10")
             
