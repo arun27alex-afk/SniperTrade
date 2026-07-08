@@ -451,7 +451,7 @@ if st.session_state['access_token']:
             st.warning("⏳ **NO TRADE ZONE (12:00 PM to 1:30 PM)**")
             st.markdown("Market is highly volatile or sideways during this time. The Algo is resting to protect your capital.")
 
-        elif ce_score >= 7 and len(active_trades) == 0:
+        elif ce_score >= 7:
             play_alert_sound()
             premium = get_premium("CE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
@@ -479,7 +479,7 @@ if st.session_state['access_token']:
                     else: st.error(f"❌ Order Failed: {order_res.get('message')}")
             else: st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Incorrect**")
                 
-        elif pe_score >= 7 and len(active_trades) == 0:
+        elif pe_score >= 7:
             play_alert_sound()
             premium = get_premium("PE")
             opt_symbol = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
