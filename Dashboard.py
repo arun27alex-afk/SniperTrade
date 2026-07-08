@@ -286,7 +286,21 @@ if st.session_state['access_token']:
             st.metric(label="NIFTY 50 (Spot)", value=f"{close:,.2f}", delta=f"{close - prev['Close']:.2f}")
             st.markdown("---")
             st.subheader("⚙️ Options Settings")
-            expiry_str = st.text_input("Enter Expiry (e.g., 26714)", "26714") 
+            # --- AUTO EXPIRY CALCULATION (Next Tuesday) ---
+            def get_next_expiry():
+                today_d = datetime.date.today()
+                days_ahead = 1 - today_d.weekday() # 1 = Tuesday
+                if days_ahead < 0:
+                    days_ahead += 7
+                next_tue = today_d + datetime.timedelta(days=days_ahead)
+                
+                m_str = str(next_tue.month) if next_tue.month <= 9 else {10: 'O', 11: 'N', 12: 'D'}[next_tue.month]
+                y_str = str(next_tue.year)[-2:]
+                d_str = f"{next_tue.day:02d}"
+                return f"{y_str}{m_str}{d_str}"
+                
+            expiry_str = get_next_expiry()
+            st.info(f"📅 Auto-Expiry: **{expiry_str}**")
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
             total_qty = num_lots * 65  
             st.write(f"Total Quantity: **{total_qty} shares**")
