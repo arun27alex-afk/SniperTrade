@@ -299,7 +299,6 @@ if st.session_state['access_token']:
             st.markdown("---")
             st.header("📊 Pre-Market Analysis")
             
-            # 1. Daily Trend Prediction (Based on Daily Timeframe)
             try:
                 # கடந்த 30 நாட்களின் Daily டேட்டாவை எடுத்து அனலைஸ் செய்வது
                 start_d = (today - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
@@ -311,9 +310,10 @@ if st.session_state['access_token']:
                     df_d['EMA_9'] = df_d['Close'].ewm(span=9, adjust=False).mean()
                     df_d['EMA_21'] = df_d['Close'].ewm(span=21, adjust=False).mean()
                     
-                    last_d = df_d.iloc[-1]
+                    # மார்க்கெட் ஓபன் ஆவதற்கு முன்பு நேற்றைய டேட்டாவை எடுப்பது
+                    last_d = df_d.iloc[-1] 
                     
-                    # Daily Trend Logic
+                    # 1. Daily Trend Logic
                     if last_d['EMA_9'] > last_d['EMA_21'] and last_d['Close'] > last_d['EMA_9']:
                         trend_msg = "🟢 UPTREND (Buy on Dips)"
                     elif last_d['EMA_9'] < last_d['EMA_21'] and last_d['Close'] < last_d['EMA_9']:
@@ -322,25 +322,29 @@ if st.session_state['access_token']:
                         trend_msg = "🟡 SIDEWAYS (Trade with Caution)"
                         
                     st.info(f"**Today's Market Trend:**\n### {trend_msg}")
-            except Exception as e:
-                st.warning("Trend data loading...")
 
-            # 2. Today's Strike Price Range Predictor (Pivot Formula)
-            st.subheader("🎯 Expected Range (Today)")
+                    # 2. Expected Range Predictor (Using YESTERDAY'S Data)
+                    st.subheader("🎯 Expected Range (Today)")
+                    
+                    # நேற்றைய High, Low, Close-ஐ வைத்து இன்றைய எல்லையைக் கணிப்பது
+                    pdh = last_d['High']
+                    pdl = last_d['Low']
+                    pdc = last_d['Close']
+                    
+                    pp = (pdh + pdl + pdc) / 3
+                    r1 = (2 * pp) - pdl
+                    s1 = (2 * pp) - pdh
+                    
+                    ce_strike_range = int(round(r1 / 50) * 50)
+                    pe_strike_range = int(round(s1 / 50) * 50)
+                    
+                    st.success(f"📈 **Max Upside (Resistance):** {ce_strike_range} CE\n\n📉 **Max Downside (Support):** {pe_strike_range} PE")
+                    st.caption("💡 Note: Market usually trades within this zone, but strong ADX momentum can break these levels!")
+
+            except Exception as e:
+                st.warning("Waiting for Market Data to load... (Will update at 9:15 AM)")
+            # ==========================================
             
-            today_high = df['High'].max()
-            today_low = df['Low'].min()
-            pp = (today_high + today_low + close) / 3
-            r1 = (2 * pp) - today_low
-            s1 = (2 * pp) - today_high
-            
-            ce_strike_range = int(round(r1 / 50) * 50)
-            pe_strike_range = int(round(s1 / 50) * 50)
-            
-            st.success(f"📈 **Max Upside (Resistance):** {ce_strike_range} CE\n\n📉 **Max Downside (Support):** {pe_strike_range} PE")
-            st.caption("💡 Note: Market usually trades within this zone, but strong ADX momentum can break these levels!")
-            # ==========================================        
-       
         # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal & Trade Alerts")
         
