@@ -345,20 +345,36 @@ if st.session_state['access_token']:
                 st.warning("Waiting for Market Data to load... (Will update at 9:15 AM)")
             # ==========================================
             
-        # --- 🎯 LIVE SIGNAL ALERT ---
+                # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal & Trade Alerts")
         
         if len(active_trades) > 0:
             current_trade = active_trades[0]
             trade_dir = "📈 CALL (BUY CE)" if current_trade['type'] == 'LONG' else "📉 PUT (BUY PE)"
             
+            # --- Fetching Live Premium for Active Trade ---
+            active_strike = int(round(current_trade['entry'] / 50) * 50)
+            opt_type = "CE" if current_trade['type'] == 'LONG' else "PE"
+            
+            def get_active_premium():
+                symbol = f"NSE:NIFTY{expiry_str}{active_strike}{opt_type}"
+                try:
+                    quote_res = fyers.quotes(data={"symbols": symbol})
+                    if quote_res.get("s") == "ok": return quote_res['d'][0]['v']['lp']
+                except: pass
+                return 0.0
+                
+            live_prem = get_active_premium()
+            
             st.warning(f"⏳ **ACTIVE TRADE RUNNING:** A {trade_dir} trade is currently active. The Algo is waiting for this trade to hit Target or Stop Loss before looking for new setups.")
-            act_col1, act_col2, act_col3, act_col4 = st.columns(4)
+            act_col1, act_col2, act_col3, act_col4, act_col5 = st.columns(5)
             act_col1.metric("⏱️ Entry Time", current_trade['entry_time'].strftime('%I:%M %p'))
-            act_col2.metric("📌 Spot Entry Price", f"{current_trade['entry']:.2f}")
-            act_col3.metric("🎯 Spot Target", f"{current_trade['target']:.2f}")
-            act_col4.metric("🛑 Spot Stop Loss", f"{current_trade['sl']:.2f}")
+            act_col2.metric(f"🔥 Live {active_strike} {opt_type}", f"₹{live_prem}")
+            act_col3.metric("📌 Spot Entry Price", f"{current_trade['entry']:.2f}")
+            act_col4.metric("🎯 Spot Target", f"{current_trade['target']:.2f}")
+            act_col5.metric("🛑 Spot SL", f"{current_trade['sl']:.2f}")
             st.markdown("---")
+
         
         if len(active_trades) > 0:
             current_trade = active_trades[-1]
