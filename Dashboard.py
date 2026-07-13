@@ -47,7 +47,6 @@ def get_ce_signal_and_checklist(data, atr_min=5):
         score += 2; checklist["MACD (MACD > Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD > Signal) [+2 pts]"] = False
         
-    # 🔥 RSI Removed & ADX 14 Added
     if data['ADX_14'] > 20:
         score += 1; checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = True
     else: checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = False
@@ -78,7 +77,6 @@ def get_pe_signal_and_checklist(data, atr_min=5):
         score += 2; checklist["MACD (MACD < Signal) [+2 pts]"] = True
     else: checklist["MACD (MACD < Signal) [+2 pts]"] = False
         
-    # 🔥 RSI Removed & ADX 14 Added
     if data['ADX_14'] > 20:
         score += 1; checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = True
     else: checklist["ADX 14 Trend (> 20 Strong) [+1 pt]"] = False
@@ -145,7 +143,6 @@ if st.session_state['access_token']:
         df['MACD_Line'] = df['EMA_12'] - df['EMA_26']
         df['Signal_Line'] = df['MACD_Line'].ewm(span=9, adjust=False).mean()
         
-        # ATR Calculation (Moved before ADX)
         df['Prev_Close'] = df['Close'].shift(1)
         tr1 = df['High'] - df['Low']
         tr2 = (df['High'] - df['Prev_Close']).abs()
@@ -153,7 +150,6 @@ if st.session_state['access_token']:
         df['TR'] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
         df['ATR'] = df['TR'].rolling(window=14).mean().fillna(10)
         
-        # 🔥 ADX 14 Calculation Added
         up = df['High'] - df['High'].shift(1)
         down = df['Low'].shift(1) - df['Low']
         df['+DM'] = np.where((up > down) & (up > 0), up, 0.0)
@@ -286,6 +282,7 @@ if st.session_state['access_token']:
             st.metric(label="NIFTY 50 (Spot)", value=f"{close:,.2f}", delta=f"{close - prev['Close']:.2f}")
             st.markdown("---")
             st.subheader("⚙️ Options Settings")
+            
             # --- AUTO EXPIRY CALCULATION (Next Tuesday) ---
             def get_next_expiry():
                 today_d = datetime.date.today()
@@ -301,20 +298,20 @@ if st.session_state['access_token']:
                 
             expiry_str = get_next_expiry()
             st.info(f"📅 Auto-Expiry: **{expiry_str}**")
+            
             num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
             total_qty = num_lots * 65  
             st.write(f"Total Quantity: **{total_qty} shares**")
             st.markdown("---")
             auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
-        # ==========================================
+            # ==========================================
             # 🌍 DAILY TREND & RANGE PREDICTOR
             # ==========================================
             st.markdown("---")
             st.header("📊 Pre-Market Analysis")
             
             try:
-                # கடந்த 30 நாட்களின் Daily டேட்டாவை எடுத்து அனலைஸ் செய்வது
                 start_d = (today - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
                 data_d = {"symbol": "NSE:NIFTY50-INDEX", "resolution": "D", "date_format": "1", "range_from": start_d, "range_to": today_date, "cont_flag": "1"}
                 res_d = fyers.history(data=data_d)
@@ -324,10 +321,8 @@ if st.session_state['access_token']:
                     df_d['EMA_9'] = df_d['Close'].ewm(span=9, adjust=False).mean()
                     df_d['EMA_21'] = df_d['Close'].ewm(span=21, adjust=False).mean()
                     
-                    # மார்க்கெட் ஓபன் ஆவதற்கு முன்பு நேற்றைய டேட்டாவை எடுப்பது
                     last_d = df_d.iloc[-1] 
                     
-                    # 1. Daily Trend Logic
                     if last_d['EMA_9'] > last_d['EMA_21'] and last_d['Close'] > last_d['EMA_9']:
                         trend_msg = "🟢 UPTREND (Buy on Dips)"
                     elif last_d['EMA_9'] < last_d['EMA_21'] and last_d['Close'] < last_d['EMA_9']:
@@ -337,10 +332,8 @@ if st.session_state['access_token']:
                         
                     st.info(f"**Today's Market Trend:**\n### {trend_msg}")
 
-                    # 2. Expected Range Predictor (Using YESTERDAY'S Data)
                     st.subheader("🎯 Expected Range (Today)")
                     
-                    # நேற்றைய High, Low, Close-ஐ வைத்து இன்றைய எல்லையைக் கணிப்பது
                     pdh = last_d['High']
                     pdl = last_d['Low']
                     pdc = last_d['Close']
@@ -357,9 +350,8 @@ if st.session_state['access_token']:
 
             except Exception as e:
                 st.warning("Waiting for Market Data to load... (Will update at 9:15 AM)")
-            # ==========================================
             
-                        # --- 🎯 LIVE SIGNAL ALERT ---
+        # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal & Trade Alerts")
         
         if len(active_trades) > 0:
@@ -370,14 +362,12 @@ if st.session_state['access_token']:
             opt_type = "CE" if current_trade['type'] == 'LONG' else "PE"
             opt_symbol = f"NSE:NIFTY{expiry_str}{active_strike}{opt_type}"
             
-            # 1. Fetching Live Premium
             live_prem = 0.0
             try:
                 quote_res = fyers.quotes(data={"symbols": opt_symbol})
                 if quote_res.get("s") == "ok": live_prem = quote_res['d'][0]['v']['lp']
             except: pass
             
-            # 2. Fetching Exact Premium Entry Price from History
             entry_prem = 0.0
             try:
                 opt_data = {"symbol": opt_symbol, "resolution": "5", "date_format": "1", "range_from": today_date, "range_to": today_date, "cont_flag": "1"}
@@ -390,7 +380,6 @@ if st.session_state['access_token']:
                         entry_prem = match.iloc[0]['Close']
             except: pass
             
-            # 3. Calculating Premium Target & SL
             trade_atr = current_trade['atr_val']
             prem_target_points = round(2.0 * trade_atr, 2)
             prem_sl_points = round(1.5 * trade_atr, 2)
@@ -401,15 +390,15 @@ if st.session_state['access_token']:
             st.warning(f"⏳ **ACTIVE TRADE RUNNING:** A {trade_dir} trade is currently active. The Algo is waiting for this trade to hit Target or Stop Loss before looking for new setups.")
             
             st.markdown("### 📊 Premium Track (Live)")
-            act_col1, act_col2, act_col3, act_col4, act_col5 = st.columns(5)
-            act_col1.metric("⏱️ Entry Time", current_trade['entry_time'].strftime('%I:%M %p'))
-            act_col2.metric(f"🔥 Live {active_strike} {opt_type}", f"₹{live_prem}")
-            act_col3.metric("🚪 Premium Entry", f"₹{entry_prem}" if entry_prem > 0 else "Loading...")
-            act_col4.metric("🎯 Premium Target", f"₹{target_prem}" if entry_prem > 0 else "-")
-            act_col5.metric("🛑 Premium SL", f"₹{sl_prem}" if entry_prem > 0 else "-")
+            
+            t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
+            t_col1.metric("📌 Strike Rate", f"{active_strike} {opt_type}")
+            t_col2.metric("🔥 Live Premium", f"₹{live_prem}")
+            t_col3.metric("🚪 Premium Entry", f"₹{entry_prem}" if entry_prem > 0 else "Loading...")
+            t_col4.metric("🎯 Target", f"₹{target_prem}" if entry_prem > 0 else "-")
+            t_col5.metric("🛑 Stop Loss", f"₹{sl_prem}" if entry_prem > 0 else "-")
             
             st.markdown("---")
-
         
         if len(active_trades) > 0:
             current_trade = active_trades[-1]
@@ -517,7 +506,6 @@ if st.session_state['access_token']:
         st.subheader("🖥️ Live Market HUD")
         hud_c1, hud_c2, hud_c3, hud_c4 = st.columns(4)
         
-        # 🔥 UI updated to show ADX status instead of RSI
         adx_color = "🟢 Strong Trend" if latest['ADX_14'] > 20 else "🔴 Weak/Sideways"
         atr_color = "🟢 Good Volatility" if current_atr > 5 else "🔴 Sideways (<5)"
         trend_color = "🟢 BUY Zone" if latest['EMA_9'] > latest['EMA_21'] else "🔴 SELL Zone"
