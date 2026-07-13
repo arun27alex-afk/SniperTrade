@@ -11,7 +11,7 @@ import time
 # ⚠️ UPDATE YOUR FYERS API DETAILS HERE ⚠️
 # ==========================================
 CLIENT_ID = "BT8FRQLN19-200"       
-SECRET_KEY = "0ivLeQN8vdI2VyKA"  # ⚠️ உங்களின் Secret Key-ஐ இங்கே போடவும்     
+SECRET_KEY = "0ivLeQN8vdI2VyKA"  
 REDIRECT_URI = "https://snipertrade-9sqhw3vstzhpvpnmyz4n5y.streamlit.app/" 
 # ==========================================
 
@@ -129,7 +129,6 @@ if st.session_state['access_token']:
         df.drop_duplicates(subset=['Timestamp'], keep='last', inplace=True)
         df['Timestamp'] = pd.to_datetime(df['Timestamp'], unit='s').dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
         
-        # --- Indicators ---
         df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
         df['VWAP'] = (df['Typical_Price'] * df['Volume']).cumsum() / df['Volume'].cumsum()
         df['VWAP'] = df['VWAP'].fillna(df['Close']) 
@@ -166,7 +165,6 @@ if st.session_state['access_token']:
         
         df = df.round(2)
         
-        # --- 🤖 AUTO-BACKTEST ENGINE ---
         targets_hit_today = 0
         sl_hit_today = 0
         smart_exits_today = 0
@@ -243,7 +241,6 @@ if st.session_state['access_token']:
 
         df_log = pd.DataFrame(trade_history_log).drop_duplicates()
         
-        # --- 📌 LIVE SCORECARD DASHBOARD ---
         st.subheader("📊 Today's Auto-Backtest Scorecard")
         col1, col2, col3, col4, col5 = st.columns(5)
         
@@ -275,7 +272,6 @@ if st.session_state['access_token']:
         prem_sl_points = round(1.5 * current_atr, 2)
         prem_target_points = round(2.0 * current_atr, 2)
         
-        # --- 📌 Sidebar Menu ---
         with st.sidebar:
             st.header("📈 Live Market")
             st.markdown("---")
@@ -283,14 +279,12 @@ if st.session_state['access_token']:
             st.markdown("---")
             st.subheader("⚙️ Options Settings")
             
-            # --- AUTO EXPIRY CALCULATION (Next Tuesday) ---
             def get_next_expiry():
                 today_d = datetime.date.today()
-                days_ahead = 1 - today_d.weekday() # 1 = Tuesday
+                days_ahead = 1 - today_d.weekday()
                 if days_ahead < 0:
                     days_ahead += 7
                 next_tue = today_d + datetime.timedelta(days=days_ahead)
-                
                 m_str = str(next_tue.month) if next_tue.month <= 9 else {10: 'O', 11: 'N', 12: 'D'}[next_tue.month]
                 y_str = str(next_tue.year)[-2:]
                 d_str = f"{next_tue.day:02d}"
@@ -305,9 +299,6 @@ if st.session_state['access_token']:
             st.markdown("---")
             auto_refresh = st.checkbox("🔄 Auto Refresh (10 Sec)", value=True)
 
-            # ==========================================
-            # 🌍 DAILY TREND & RANGE PREDICTOR
-            # ==========================================
             st.markdown("---")
             st.header("📊 Pre-Market Analysis")
             
@@ -331,7 +322,6 @@ if st.session_state['access_token']:
                         trend_msg = "🟡 SIDEWAYS (Trade with Caution)"
                         
                     st.info(f"**Today's Market Trend:**\n### {trend_msg}")
-
                     st.subheader("🎯 Expected Range (Today)")
                     
                     pdh = last_d['High']
@@ -345,13 +335,10 @@ if st.session_state['access_token']:
                     ce_strike_range = int(round(r1 / 50) * 50)
                     pe_strike_range = int(round(s1 / 50) * 50)
                     
-                    st.success(f"📈 **Max Upside (Resistance):** {ce_strike_range} CE\n\n📉 **Max Downside (Support):** {pe_strike_range} PE")
-                    st.caption("💡 Note: Market usually trades within this zone, but strong ADX momentum can break these levels!")
-
+                    st.success(f"📈 **Max Upside:** {ce_strike_range} CE\n\n📉 **Max Downside:** {pe_strike_range} PE")
             except Exception as e:
-                st.warning("Waiting for Market Data to load... (Will update at 9:15 AM)")
+                st.warning("Waiting for Market Data to load...")
             
-        # --- 🎯 LIVE SIGNAL ALERT ---
         st.subheader("🎯 Live Signal & Trade Alerts")
         
         if len(active_trades) > 0:
@@ -387,7 +374,7 @@ if st.session_state['access_token']:
             target_prem = round(entry_prem + prem_target_points, 2) if entry_prem > 0 else 0.0
             sl_prem = round(entry_prem - prem_sl_points, 2) if entry_prem > 0 else 0.0
             
-            st.warning(f"⏳ **ACTIVE TRADE RUNNING:** A {trade_dir} trade is currently active. The Algo is waiting for this trade to hit Target or Stop Loss before looking for new setups.")
+            st.warning(f"⏳ **ACTIVE TRADE RUNNING:** A {trade_dir} trade is currently active.")
             
             st.markdown("### 📊 Premium Track (Live)")
             
@@ -416,7 +403,7 @@ if st.session_state['access_token']:
                 if is_trend_dead:
                     play_alert_sound()
                     st.error(f"### ⚠️ SMART ALERT: TREND REVERSAL DETECTED!")
-                    st.markdown(f"**Market momentum has slowed down!** Price has breached EMA 9. Your Stop Loss is secured at +5 points. You are currently in **+{current_profit:.2f} points profit**. Book your profits immediately! 💸")
+                    st.markdown(f"Your Stop Loss is secured at +5 points. You are currently in **+{current_profit:.2f} points profit**.")
                     st.markdown("---")
         
         atm_strike = int(round(close / 50) * 50) 
@@ -438,7 +425,7 @@ if st.session_state['access_token']:
 
         if not is_live_valid_time:
             st.warning("⏳ **NO TRADE ZONE (12:00 PM to 1:30 PM)**")
-            st.markdown("Market is highly volatile or sideways during this time. The Algo is resting to protect your capital.")
+            st.markdown("Market is highly volatile or sideways during this time.")
 
         elif ce_score >= 7:
             play_alert_sound()
@@ -459,13 +446,12 @@ if st.session_state['access_token']:
                 t_col4.metric(f"🛑 Stop Loss (-{prem_sl_points})", f"₹{round(premium - prem_sl_points, 2)}")
                 t_col5.metric("⏰ Signal Time", signal_time)
                 
-                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 st.write("")
                 if st.button(f"🚀 BUY {atm_strike} CE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
-                    if order_res.get("s") == "ok": st.balloons(); st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
-                    else: st.error(f"❌ Order Failed: {order_res.get('message')}")
+                    if order_res.get("s") == "ok": st.balloons(); st.success("✅ Order Placed Successfully!")
+                    else: st.error("❌ Order Failed.")
             else: st.warning(f"Strike: {atm_strike} CE - **Market Closed or Expiry Incorrect**")
                 
         elif pe_score >= 7:
@@ -487,13 +473,12 @@ if st.session_state['access_token']:
                 t_col4.metric(f"🛑 Stop Loss (-{prem_sl_points})", f"₹{round(premium - prem_sl_points, 2)}")
                 t_col5.metric("⏰ Signal Time", signal_time)
                 
-                st.info(f"💡 **Safe Entry Range:** ₹{premium} to ₹{round(premium + 4, 2)} only! \n⚠️ **Warning:** If the premium crosses above ₹{round(premium + 4, 2)}, please DO NOT enter this trade (Avoid Chasing)!")
                 st.write("")
                 if st.button(f"🚀 BUY {atm_strike} PE NOW ({num_lots} Lot)", type="primary", use_container_width=True):
                     order_data = {"symbol": opt_symbol, "qty": total_qty, "type": 2, "side": 1, "productType": "MARGIN", "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": "False"}
                     order_res = fyers.place_order(data=order_data)
-                    if order_res.get("s") == "ok": st.balloons(); st.success(f"✅ Order Placed Successfully! ID: {order_res.get('id')}")
-                    else: st.error(f"❌ Order Failed: {order_res.get('message')}")
+                    if order_res.get("s") == "ok": st.balloons(); st.success("✅ Order Placed Successfully!")
+                    else: st.error("❌ Order Failed.")
             else: st.warning(f"Strike: {atm_strike} PE - **Market Closed or Expiry Incorrect**")
                 
         else:
@@ -502,7 +487,6 @@ if st.session_state['access_token']:
             
         st.markdown("---")
 
-        # --- 🎨 MINI HUD DASHBOARD (UPDATED FOR ADX) ---
         st.subheader("🖥️ Live Market HUD")
         hud_c1, hud_c2, hud_c3, hud_c4 = st.columns(4)
         
@@ -516,7 +500,6 @@ if st.session_state['access_token']:
         hud_c3.info(f"**Trend (EMA):** \n\n {trend_color}")
         hud_c4.info(f"**VWAP Status:** \n\n {vwap_color}")
 
-        # --- 📊 PRO INTERACTIVE CHART ---
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.75, 0.25])
         
         fig.add_trace(go.Candlestick(x=df['Timestamp'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Candles'), row=1, col=1)
@@ -536,15 +519,7 @@ if st.session_state['access_token']:
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MACD_Line'], line=dict(color='#2196f3', width=1.5), name='MACD'), row=2, col=1)
         fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['Signal_Line'], line=dict(color='#ff9800', width=1.5), name='Signal'), row=2, col=1)
 
-        fig.update_layout(
-            plot_bgcolor='white', 
-            paper_bgcolor='white', 
-            height=650, 
-            margin=dict(l=10, r=10, t=30, b=10), 
-            dragmode='pan', 
-            hovermode='x unified', 
-            showlegend=False
-        )
+        fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', height=650, margin=dict(l=10, r=10, t=30, b=10), dragmode='pan', hovermode='x unified', showlegend=False)
         fig.update_xaxes(fixedrange=False, rangeslider_visible=False, tickformat="%H:%M")
         fig.update_yaxes(fixedrange=False)
         
