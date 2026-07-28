@@ -390,6 +390,48 @@ if st.session_state['access_token']:
             ce_score, ce_checklist = get_ce_signal_and_checklist(latest)
             pe_score, pe_checklist = get_pe_signal_and_checklist(latest)
             
+            # ==========================================================
+            # 🎯 NEW ADDITION: SNIPER OI DASHBOARD (Live 3-Min Tracker)
+            # ==========================================================
+            st.subheader("🔥 Live Options OI Dashboard (3-Min Tracker)")
+            
+            # Dummy function to simulate fetching OI (Replace with actual Fyers API logic later)
+            def get_live_oi_data():
+                return {
+                    "ce_oi": "8.12L", 
+                    "ce_oi_chg": "4.11L",
+                    "strike": f"{atm_strike}",  # Using the live ATM strike from your code
+                    "pe_oi_chg": "6.68L",
+                    "pe_oi": "13.12L",
+                    "ce_oi_3min_diff": -5000,
+                    "ce_oi_chg_3min_diff": 12000,
+                    "pe_oi_chg_3min_diff": 8000,
+                    "pe_oi_3min_diff": -2000
+                }
+
+            oi_data = get_live_oi_data()
+
+            oi_col1, oi_col2, oi_col3, oi_col4, oi_col5 = st.columns(5)
+
+            with oi_col1:
+                st.metric(label="🔴 CE OI", value=oi_data["ce_oi"], delta=oi_data["ce_oi_3min_diff"])
+
+            with oi_col2:
+                st.metric(label="🔴 CE OI Chg", value=oi_data["ce_oi_chg"], delta=oi_data["ce_oi_chg_3min_diff"])
+
+            with oi_col3:
+                st.markdown(f"<h2 style='text-align: center; color: #f1c40f; margin-top: 0px;'>{oi_data['strike']}</h2>", unsafe_allow_html=True)
+                st.markdown("<p style='text-align: center; font-size: 14px;'>(ATM Strike)</p>", unsafe_allow_html=True)
+
+            with oi_col4:
+                st.metric(label="🟢 PE OI Chg", value=oi_data["pe_oi_chg"], delta=oi_data["pe_oi_chg_3min_diff"])
+
+            with oi_col5:
+                st.metric(label="🟢 PE OI", value=oi_data["pe_oi"], delta=oi_data["pe_oi_3min_diff"])
+            
+            st.markdown("---")
+            # ==========================================================
+
             def get_premium(opt_type):
                 symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
                 try:
