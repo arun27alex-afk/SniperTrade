@@ -396,18 +396,46 @@ if st.session_state['access_token']:
             # ==========================================================
             st.subheader("🔥 Live Options OI Dashboard (3-Min Tracker)")
             
-            # Dummy function to simulate fetching OI (Replace with actual Fyers API logic later)
+           # ==========================================
+            # 🔥 LIVE FYERS OI FETCH & 3-MIN TRACKER
+            # ==========================================
+            if 'oi_tracker' not in st.session_state:
+                st.session_state['oi_tracker'] = {'ce_oi': 0, 'pe_oi': 0}
+
             def get_live_oi_data():
+                ce_sym = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
+                pe_sym = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
+                c_oi, p_oi = 0, 0
+                
+                try:
+                    # Fetch real OI from Fyers Live Quotes
+                    q_res = fyers.quotes(data={"symbols": f"{ce_sym},{pe_sym}"})
+                    if q_res.get("s") == "ok":
+                        for item in q_res['d']:
+                            if item['n'] == ce_sym: c_oi = item['v'].get('open_interest', 0)
+                            if item['n'] == pe_sym: p_oi = item['v'].get('open_interest', 0)
+                except: pass
+
+                # Calculate 3-min Difference
+                prev = st.session_state['oi_tracker']
+                ce_diff = c_oi - prev['ce_oi'] if prev['ce_oi'] != 0 else 0
+                pe_diff = p_oi - prev['pe_oi'] if prev['pe_oi'] != 0 else 0
+                
+                # Save new values to memory
+                st.session_state['oi_tracker']['ce_oi'] = c_oi
+                st.session_state['oi_tracker']['pe_oi'] = p_oi
+                
+                # Format values safely
                 return {
-                    "ce_oi": "8.12L", 
-                    "ce_oi_chg": "4.11L",
-                    "strike": f"{atm_strike}",  # Using the live ATM strike from your code
-                    "pe_oi_chg": "6.68L",
-                    "pe_oi": "13.12L",
-                    "ce_oi_3min_diff": -5000,
-                    "ce_oi_chg_3min_diff": 12000,
-                    "pe_oi_chg_3min_diff": 8000,
-                    "pe_oi_3min_diff": -2000
+                    "ce_oi": f"{c_oi/100000:.2f}L" if c_oi > 0 else "0.00L", 
+                    "ce_oi_chg": f"{ce_diff/100000:.2f}L",
+                    "strike": f"{atm_strike}",
+                    "pe_oi_chg": f"{pe_diff/100000:.2f}L",
+                    "pe_oi": f"{p_oi/100000:.2f}L" if p_oi > 0 else "0.00L",
+                    "ce_oi_3min_diff": int(ce_diff),
+                    "ce_oi_chg_3min_diff": 0,
+                    "pe_oi_chg_3min_diff": 0,
+                    "pe_oi_3min_diff": int(pe_diff)
                 }
 
             oi_data = get_live_oi_data()
