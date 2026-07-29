@@ -283,7 +283,8 @@ if st.session_state['access_token']:
                     m_str = str(next_tue.month) if next_tue.month <= 9 else {10: 'O', 11: 'N', 12: 'D'}[next_tue.month]
                     y_str = str(next_tue.year)[-2:]
                     d_str = f"{next_tue.day:02d}"
-                    return "26AUG"
+                    return f"{y_str}{m_str}{d_str}"
+
                     
                 expiry_str = get_next_expiry()
                 st.info(f"📅 Auto-Expiry: **{expiry_str}**")
