@@ -284,7 +284,6 @@ if st.session_state['access_token']:
                     y_str = str(next_tue.year)[-2:]
                     d_str = f"{next_tue.day:02d}"
                     return f"{y_str}{m_str}{d_str}"
-
                     
                 expiry_str = get_next_expiry()
                 st.info(f"📅 Auto-Expiry: **{expiry_str}**")
@@ -391,76 +390,6 @@ if st.session_state['access_token']:
             ce_score, ce_checklist = get_ce_signal_and_checklist(latest)
             pe_score, pe_checklist = get_pe_signal_and_checklist(latest)
             
-            # ==========================================================
-            # 🎯 NEW ADDITION: SNIPER OI DASHBOARD (Live 3-Min Tracker)
-            # ==========================================================
-            st.subheader("🔥 Live Options OI Dashboard (3-Min Tracker)")
-            
-           # ==========================================
-            # 🔥 LIVE FYERS OI FETCH & 3-MIN TRACKER
-            # ==========================================
-            if 'oi_tracker' not in st.session_state:
-                st.session_state['oi_tracker'] = {'ce_oi': 0, 'pe_oi': 0}
-
-            def get_live_oi_data():
-                ce_sym = f"NSE:NIFTY{expiry_str}{atm_strike}CE"
-                pe_sym = f"NSE:NIFTY{expiry_str}{atm_strike}PE"
-                c_oi, p_oi = 0, 0
-                
-                try:
-                    # Fetch real OI from Fyers Live Quotes
-                    q_res = fyers.quotes(data={"symbols": f"{ce_sym},{pe_sym}"})
-                    if q_res.get("s") == "ok":
-                        for item in q_res['d']:
-                            if item['n'] == ce_sym: c_oi = item['v'].get('open_interest', 0)
-                            if item['n'] == pe_sym: p_oi = item['v'].get('open_interest', 0)
-                except: pass
-
-                # Calculate 3-min Difference
-                prev = st.session_state['oi_tracker']
-                ce_diff = c_oi - prev['ce_oi'] if prev['ce_oi'] != 0 else 0
-                pe_diff = p_oi - prev['pe_oi'] if prev['pe_oi'] != 0 else 0
-                
-                # Save new values to memory
-                st.session_state['oi_tracker']['ce_oi'] = c_oi
-                st.session_state['oi_tracker']['pe_oi'] = p_oi
-                
-                # Format values safely
-                return {
-                    "ce_oi": f"{c_oi/100000:.2f}L" if c_oi > 0 else "0.00L", 
-                    "ce_oi_chg": f"{ce_diff/100000:.2f}L",
-                    "strike": f"{atm_strike}",
-                    "pe_oi_chg": f"{pe_diff/100000:.2f}L",
-                    "pe_oi": f"{p_oi/100000:.2f}L" if p_oi > 0 else "0.00L",
-                    "ce_oi_3min_diff": int(ce_diff),
-                    "ce_oi_chg_3min_diff": 0,
-                    "pe_oi_chg_3min_diff": 0,
-                    "pe_oi_3min_diff": int(pe_diff)
-                }
-
-            oi_data = get_live_oi_data()
-
-            oi_col1, oi_col2, oi_col3, oi_col4, oi_col5 = st.columns(5)
-
-            with oi_col1:
-                st.metric(label="🔴 CE OI", value=oi_data["ce_oi"], delta=oi_data["ce_oi_3min_diff"])
-
-            with oi_col2:
-                st.metric(label="🔴 CE OI Chg", value=oi_data["ce_oi_chg"], delta=oi_data["ce_oi_chg_3min_diff"])
-
-            with oi_col3:
-                st.markdown(f"<h2 style='text-align: center; color: #f1c40f; margin-top: 0px;'>{oi_data['strike']}</h2>", unsafe_allow_html=True)
-                st.markdown("<p style='text-align: center; font-size: 14px;'>(ATM Strike)</p>", unsafe_allow_html=True)
-
-            with oi_col4:
-                st.metric(label="🟢 PE OI Chg", value=oi_data["pe_oi_chg"], delta=oi_data["pe_oi_chg_3min_diff"])
-
-            with oi_col5:
-                st.metric(label="🟢 PE OI", value=oi_data["pe_oi"], delta=oi_data["pe_oi_3min_diff"])
-            
-            st.markdown("---")
-            # ==========================================================
-
             def get_premium(opt_type):
                 symbol = f"NSE:NIFTY{expiry_str}{atm_strike}{opt_type}"
                 try:
