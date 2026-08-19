@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from fyers_apiv3 import fyersModel
 import datetime
+from zoneinfo import ZoneInfo
 import time
 
 # ==========================================
@@ -77,6 +78,48 @@ def get_pe_signal_and_checklist(data, atr_min=5):
     return score, checklist
 
 # -----------------------------------------------
+
+# --- NIFTY AUTO-EXPIRY HELPER ---
+def get_next_expiry():
+    """
+    Return the nearest NIFTY expiry date and the FYERS option-symbol expiry code.
+
+    NIFTY weekly expiry: Tuesday.
+    FYERS symbol format:
+      - Weekly: YYMDD (Jan-Sep use 1-9, Oct=O, Nov=N, Dec=D)
+      - Monthly (last Tuesday): YYMMM, e.g. 26AUG
+    """
+    now = datetime.datetime.now(ZoneInfo("Asia/Kolkata"))
+    today_d = now.date()
+
+    # Monday=0, Tuesday=1 ... Sunday=6
+    days_ahead = (1 - today_d.weekday()) % 7
+
+    # After market close on expiry Tuesday, move to next week's expiry.
+    if days_ahead == 0 and now.time() >= datetime.time(15, 30):
+        days_ahead = 7
+
+    next_expiry = today_d + datetime.timedelta(days=days_ahead)
+
+    # If the following Tuesday falls in the next month, this is the monthly expiry.
+    following_tuesday = next_expiry + datetime.timedelta(days=7)
+    is_monthly_expiry = following_tuesday.month != next_expiry.month
+
+    if is_monthly_expiry:
+        # Example: 25-Aug-2026 -> 26AUG
+        expiry_str = next_expiry.strftime("%y%b").upper()
+    else:
+        month_map = {
+            1: "1", 2: "2", 3: "3", 4: "4",
+            5: "5", 6: "6", 7: "7", 8: "8",
+            9: "9", 10: "O", 11: "N", 12: "D"
+        }
+        y_str = str(next_expiry.year)[-2:]
+        m_str = month_map[next_expiry.month]
+        d_str = f"{next_expiry.day:02d}"
+        expiry_str = f"{y_str}{m_str}{d_str}"
+
+    return next_expiry, expiry_str
 
 st.title("🎯 Sniper Trade App (NIFTY 50 Live & Algo Execution)")
 st.markdown("---")
@@ -275,61 +318,13 @@ if st.session_state['access_token']:
                 st.markdown("---")
                 st.subheader("⚙️ Options Settings")
                 
-def get_next_expiry():
-    import datetime
+                expiry_date, expiry_str = get_next_expiry()
+                st.info(
+                    f"📅 Auto Expiry: "
+                    f"**{expiry_date.strftime('%d-%b-%Y')}** "
+                    f"| FYERS Code: **{expiry_str}**"
+                )
 
-    now = datetime.datetime.now()
-    today_d = now.date()
-
-    # NIFTY weekly expiry = Tuesday
-    # Monday = 0, Tuesday = 1, Wednesday = 2...
-    days_ahead = (1 - today_d.weekday()) % 7
-
-    # If today is Tuesday but market is already closed,
-    # select next Tuesday
-    if days_ahead == 0 and now.time() >= datetime.time(15, 30):
-        days_ahead = 7
-
-    next_expiry = today_d + datetime.timedelta(days=days_ahead)
-
-    # FYERS weekly expiry format:
-    # Jan-Sep = 1-9
-    # Oct = O
-    # Nov = N
-    # Dec = D
-    month_map = {
-        1: "1",
-        2: "2",
-        3: "3",
-        4: "4",
-        5: "5",
-        6: "6",
-        7: "7",
-        8: "8",
-        9: "9",
-        10: "O",
-        11: "N",
-        12: "D"
-    }
-
-    y_str = str(next_expiry.year)[-2:]
-    m_str = month_map[next_expiry.month]
-    d_str = f"{next_expiry.day:02d}"
-
-    expiry_str = f"{y_str}{m_str}{d_str}"
-
-    return next_expiry, expiry_str
-
-
-expiry_date, expiry_str = get_next_expiry()
-
-st.info(
-    f"📅 Auto Expiry: "
-    f"**{expiry_date.strftime('%d-%b-%Y')}** "
-    f"| FYERS Code: **{expiry_str}**"
-)
-
-                
                 num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
                 total_qty = num_lots * 65  
                 st.write(f"Total Quantity: **{total_qty} shares**")
@@ -523,11 +518,11 @@ st.info(
             fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['MACD_Line'], line=dict(color='#2196f3', width=1.5), name='MACD'), row=2, col=1)
             fig.add_trace(go.Scatter(x=df['Timestamp'], y=df['Signal_Line'], line=dict(color='#ff9800', width=1.5), name='Signal'), row=2, col=1)
 
-            fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', height=650, margin=dict(l=10, r=10, t=30, b=10), dragmode='pan', hovermode='x unified', showlegend=False)
+            fig.update_layout(plot_bgcolor='white', paper_bgcolor='white', height=650, margin=dict(l=10, r=10, t=30, b=10), dragmode='zoom', hovermode='x unified', showlegend=False)
             fig.update_xaxes(fixedrange=False, rangeslider_visible=False, tickformat="%H:%M")
             fig.update_yaxes(fixedrange=False)
             
-            chart_config = {'scrollZoom': True, 'displayModeBar': True, 'displaylogo': False}
+            chart_config = {'scrollZoom': True, 'displayModeBar': True, 'displaylogo': False, 'responsive': True}
             st.plotly_chart(fig, use_container_width=True, config=chart_config)
             
             if auto_refresh:
