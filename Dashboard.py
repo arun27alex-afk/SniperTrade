@@ -278,7 +278,7 @@ if st.session_state['access_token']:
                 def get_next_expiry():
                     today_d = datetime.date.today()
                     days_ahead = 1 - today_d.weekday()
-                    if days_ahead < 0: days_ahead += 7
+                    if days_ahead < 0 or (days_ahead == 0 and datetime.datetime.now().time() > datetime.time(15, 30)): days_ahead += 7
                     next_tue = today_d + datetime.timedelta(days=days_ahead)
                     m_str = str(next_tue.month) if next_tue.month <= 9 else {10: 'O', 11: 'N', 12: 'D'}[next_tue.month]
                     y_str = str(next_tue.year)[-2:]
