@@ -276,17 +276,59 @@ if st.session_state['access_token']:
                 st.subheader("⚙️ Options Settings")
                 
                 def get_next_expiry():
-                    today_d = datetime.date.today()
-                    days_ahead = 1 - today_d.weekday()
-                    if days_ahead < 0 or (days_ahead == 0 and datetime.datetime.now().time() > datetime.time(15, 30)): days_ahead += 7
-                    next_tue = today_d + datetime.timedelta(days=days_ahead)
-                    m_str = str(next_tue.month) if next_tue.month <= 9 else {10: 'O', 11: 'N', 12: 'D'}[next_tue.month]
-                    y_str = str(next_tue.year)[-2:]
-                    d_str = f"{next_tue.day:02d}"
-                    return f"{y_str}{m_str}{d_str}"
-                    
-                expiry_str = get_next_expiry()
-                st.info(f"📅 Auto-Expiry: **{expiry_str}**")
+    import datetime
+
+    now = datetime.datetime.now()
+    today_d = now.date()
+
+    # NIFTY weekly expiry = Tuesday
+    # Monday = 0, Tuesday = 1, Wednesday = 2...
+    days_ahead = (1 - today_d.weekday()) % 7
+
+    # If today is Tuesday but market is already closed,
+    # select next Tuesday
+    if days_ahead == 0 and now.time() >= datetime.time(15, 30):
+        days_ahead = 7
+
+    next_expiry = today_d + datetime.timedelta(days=days_ahead)
+
+    # FYERS weekly expiry format:
+    # Jan-Sep = 1-9
+    # Oct = O
+    # Nov = N
+    # Dec = D
+    month_map = {
+        1: "1",
+        2: "2",
+        3: "3",
+        4: "4",
+        5: "5",
+        6: "6",
+        7: "7",
+        8: "8",
+        9: "9",
+        10: "O",
+        11: "N",
+        12: "D"
+    }
+
+    y_str = str(next_expiry.year)[-2:]
+    m_str = month_map[next_expiry.month]
+    d_str = f"{next_expiry.day:02d}"
+
+    expiry_str = f"{y_str}{m_str}{d_str}"
+
+    return next_expiry, expiry_str
+
+
+expiry_date, expiry_str = get_next_expiry()
+
+st.info(
+    f"📅 Auto Expiry: "
+    f"**{expiry_date.strftime('%d-%b-%Y')}** "
+    f"| FYERS Code: **{expiry_str}**"
+)
+
                 
                 num_lots = st.number_input("Select Number of Lots", min_value=1, max_value=50, value=1, step=1)
                 total_qty = num_lots * 65  
