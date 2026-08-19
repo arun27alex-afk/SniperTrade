@@ -275,7 +275,7 @@ if st.session_state['access_token']:
                 st.markdown("---")
                 st.subheader("⚙️ Options Settings")
                 
-                def get_next_expiry():
+def get_next_expiry():
     import datetime
 
     now = datetime.datetime.now()
